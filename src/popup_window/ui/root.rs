@@ -1343,14 +1343,9 @@ impl PopupRoot {
     }
 
     pub(super) fn install_update(&mut self) {
+        // Failures are reported on the update card.
         std::thread::spawn(|| {
-            if let Err(error) = crate::updater::apply_pending_update() {
-                eprintln!("failed to apply update: {error:#}");
-                crate::notifications::show_error(
-                    crate::i18n::tr("update-failed"),
-                    &format!("{error:#}"),
-                );
-            }
+            let _ = crate::updater::apply_pending_update();
         });
     }
 

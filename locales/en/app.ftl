@@ -2585,3 +2585,24 @@ notification-sounds = Notification sounds
 
 # src/settings_window/notifications.rs
 plays-a-short-sound-with-each-notification = Plays a short sound with each notification
+
+# src/updater.rs
+update-downloading = Downloading update
+
+# src/updater.rs
+update-download-progress = { $downloaded } of { $total }
+
+# src/updater.rs
+update-downloaded = { $downloaded } downloaded
+
+# src/updater.rs
+update-installing = Installing update
+
+# src/updater.rs
+update-unpacking = Unpacking files…
+
+# src/updater.rs
+update-restarting = Restarting Codex Minibar
+
+# src/updater.rs
+update-restarting-body = The app will reopen in a moment.

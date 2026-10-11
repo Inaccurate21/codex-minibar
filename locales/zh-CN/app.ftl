@@ -1675,3 +1675,24 @@ reset-rate-limited = 重置请求过多。请稍后重试。
 reset-sign-in-again = 请重新登录 Claude 以使用重置。
 reset-cli-login-required = 请使用同一账户的 Claude CLI 登录来重置。
 reset-invalid-grant = Claude 返回了无效的重置额度。
+
+# src/updater.rs
+update-downloading = 正在下载更新
+
+# src/updater.rs
+update-download-progress = { $downloaded } / { $total }
+
+# src/updater.rs
+update-downloaded = 已下载 { $downloaded }
+
+# src/updater.rs
+update-installing = 正在安装更新
+
+# src/updater.rs
+update-unpacking = 正在解压文件…
+
+# src/updater.rs
+update-restarting = 正在重启 Codex Minibar
+
+# src/updater.rs
+update-restarting-body = 应用即将重新打开。

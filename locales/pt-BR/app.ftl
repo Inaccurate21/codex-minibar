@@ -1696,3 +1696,24 @@ reset-rate-limited = Muitas solicitações de redefinição. Tente mais tarde.
 reset-sign-in-again = Entre novamente no Claude para usar redefinições.
 reset-cli-login-required = Use o login do Claude CLI da mesma conta para aplicar redefinições.
 reset-invalid-grant = O Claude retornou uma redefinição inválida.
+
+# src/updater.rs
+update-downloading = Baixando atualização
+
+# src/updater.rs
+update-download-progress = { $downloaded } de { $total }
+
+# src/updater.rs
+update-downloaded = { $downloaded } baixados
+
+# src/updater.rs
+update-installing = Instalando atualização
+
+# src/updater.rs
+update-unpacking = Descompactando arquivos…
+
+# src/updater.rs
+update-restarting = Reiniciando o Codex Minibar
+
+# src/updater.rs
+update-restarting-body = O app será reaberto em instantes.

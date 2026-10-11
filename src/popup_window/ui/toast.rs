@@ -24,7 +24,7 @@ use gpui::{
 
 use crate::{
     limits::LimitWindow,
-    notifications::{LimitAlert, LimitFocus, Notification, NotificationKind},
+    notifications::{LimitAlert, LimitFocus, Notification, NotificationKind, Progress},
     popup_window::{
         capitalize_plan_name, format_reset_in,
         model::{interval_tick_count, limit_card_presentation, limit_labels},
@@ -72,6 +72,11 @@ const TICK: Duration = Duration::from_millis(100);
 /// fills; the other quotas stand still so it is clear which one it was.
 const FILL_DELAY: Duration = Duration::from_millis(200);
 const FILL: Duration = Duration::from_millis(1100);
+/// Space between the text and a progress bar.
+const PROGRESS_GAP: f32 = 10.0;
+/// One sweep of an indeterminate bar, and the share of the track it covers.
+const SWEEP: Duration = Duration::from_millis(1600);
+const SWEEP_WIDTH: f32 = 0.35;
 
 thread_local! {
     static HOST: RefCell<Option<WindowHandle<ToastHost>>> = const { RefCell::new(None) };
@@ -112,6 +117,9 @@ pub(crate) struct ToastHost {
     default_font: SharedString,
     cards: Vec<Card>,
     next_id: u64,
+    /// Keys of progress cards closed by hand; their further progress stays
+    /// hidden until the operation reports its result.
+    dismissed_keys: Vec<&'static str>,
     fx: Fx,
     /// Palette of the popup state it was built from, keyed by that state and
     /// the system appearance; resolving the system accent every frame is slow.
@@ -222,6 +230,7 @@ impl ToastHost {
             default_font: super::theme::default_font_family(cx),
             cards: Vec::new(),
             next_id: 0,
+            dismissed_keys: Vec::new(),
             fx: Fx::default(),
             palette: None,
             ticking: false,
@@ -282,6 +291,9 @@ impl ToastHost {
         if !notification.actions.is_empty() {
             height += SECTION_GAP + BUTTON_HEIGHT;
         }
+        if notification.progress.is_some() {
+            height += PROGRESS_GAP + components::PROGRESS_TRACK_HEIGHT;
+        }
         if let Some(alert) = alert {
             let rows = quota_rows(alert).len() as f32;
             height += SECTION_GAP + LINE + rows * (palette.card_gap + LIMIT_CARD);
@@ -297,10 +309,37 @@ impl ToastHost {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
-        crate::notifications::play_sound(&notification);
         let palette = self.palette(window, cx);
         let height = self.measure(&notification, window, &palette);
         let now = Instant::now();
+        if let Some(key) = notification.key {
+            let finished = notification.progress.is_none();
+            // The same operation moves on: update its card in place.
+            if let Some(card) = self
+                .cards
+                .iter_mut()
+                .find(|card| card.leaving.is_none() && card.notification.key == Some(key))
+            {
+                if finished {
+                    crate::notifications::play_sound(&notification);
+                    // The result gets its full lifetime from now.
+                    card.shown = Duration::ZERO;
+                    card.last_tick = now;
+                }
+                card.notification = notification;
+                card.height = height;
+                cx.notify();
+                return false;
+            }
+            if !finished && self.dismissed_keys.contains(&key) {
+                return false;
+            }
+            self.dismissed_keys.retain(|dismissed| *dismissed != key);
+        }
+        // Progress steps are silent; the result plays the sound.
+        if notification.progress.is_none() {
+            crate::notifications::play_sound(&notification);
+        }
         // Identical notifications (e.g. a burst of the same error) replace
         // the visible one instead of piling up.
         self.cards.retain(|card| {
@@ -351,6 +390,12 @@ impl ToastHost {
             && card.leaving.is_none()
         {
             card.leaving = Some(Instant::now());
+            if let Some(key) = card.notification.key
+                && card.notification.progress.is_some()
+                && !self.dismissed_keys.contains(&key)
+            {
+                self.dismissed_keys.push(key);
+            }
             cx.notify();
         }
     }
@@ -375,7 +420,9 @@ impl ToastHost {
             let delta = now.saturating_duration_since(card.last_tick);
             card.last_tick = now;
             let entered = !animate || now.saturating_duration_since(card.born) >= ENTER;
-            if card.leaving.is_none() && !card.hovered && !card.pinned && entered {
+            // A card with progress waits for its operation's result.
+            let running = card.notification.progress.is_some();
+            if card.leaving.is_none() && !card.hovered && !card.pinned && !running && entered {
                 card.shown += delta;
                 if card.shown >= card.notification.lifetime() {
                     card.leaving = Some(now);
@@ -445,15 +492,20 @@ impl Render for ToastHost {
         // Bottom-up stack: the newest card sits lowest. Leaving cards keep
         // their slot while they fade so nothing jumps under the pointer.
         // The host can be shorter than `HOST_HEIGHT` on a small work area.
+        // A card that changes content (an operation moving to its result)
+        // glides to its new height and the stack above follows.
         let mut bottom = f32::from(window.viewport_size().height) - EDGE;
         let mut frames = Vec::with_capacity(self.cards.len());
         for card in self.cards.iter().rev() {
-            let target = bottom - card.height;
+            let height = self
+                .fx
+                .value(fx::key(("toast-h", card.id)), card.height, fx::SETTLE);
+            let target = bottom - height;
             bottom = target - GAP;
             let y = self
                 .fx
                 .value(fx::key(("toast-y", card.id)), target, fx::SETTLE);
-            frames.push(y);
+            frames.push((y, height));
         }
         frames.reverse();
 
@@ -462,7 +514,7 @@ impl Render for ToastHost {
         #[cfg(windows)]
         let mut region = Vec::with_capacity(self.cards.len());
         let scale = window.scale_factor();
-        for (card, y) in self.cards.iter().zip(frames) {
+        for (card, (y, height)) in self.cards.iter().zip(frames) {
             let age = now.saturating_duration_since(card.born);
             let (enter, exit) = if animate {
                 (progress(age, ENTER), card.exit_progress(now))
@@ -470,7 +522,8 @@ impl Render for ToastHost {
                 (1.0, 0.0)
             };
             let filling = card.notification.limits.is_some() && age < FILL_DELAY + FILL;
-            if animate && (enter < 1.0 || card.leaving.is_some() || filling) {
+            let sweeping = card.notification.progress == Some(Progress::Indeterminate);
+            if animate && (enter < 1.0 || card.leaving.is_some() || filling || sweeping) {
                 animating = true;
             }
             let enter_eased = fx::ease_out_cubic(enter);
@@ -487,20 +540,34 @@ impl Render for ToastHost {
                     left,
                     top: ((y - 4.0) * scale).floor() as i32,
                     right: right.max(left),
-                    bottom: ((y + card.height + 8.0) * scale).ceil() as i32,
+                    bottom: ((y + height + 8.0) * scale).ceil() as i32,
                 });
             }
             let hover = self
                 .fx
                 .toggle(fx::key(("toast-hover", card.id)), card.hovered, fx::FASTER);
+            let progress = card.notification.progress.map(|progress| match progress {
+                // Keyed by step so a new step starts from its own value
+                // instead of draining the previous bar.
+                Progress::Fraction(fraction) => BarFrame::Fraction(self.fx.value(
+                    fx::key(("toast-progress", card.id, &card.notification.title)),
+                    fraction.clamp(0.0, 1.0),
+                    fx::NORMAL,
+                )),
+                Progress::Indeterminate => BarFrame::Sweep(
+                    animate.then(|| sweep_cycle(now.saturating_duration_since(card.born))),
+                ),
+            });
             elements.push(self.card(
                 card,
                 CardFrame {
                     x,
                     y,
+                    height,
                     alpha,
                     hover,
                     age: animate.then_some(age),
+                    progress,
                 },
                 prefs,
                 &palette,
@@ -532,10 +599,67 @@ impl Render for ToastHost {
 struct CardFrame {
     x: f32,
     y: f32,
+    height: f32,
     alpha: f32,
     hover: f32,
     /// Time since the card appeared; `None` when motion is off.
     age: Option<Duration>,
+    progress: Option<BarFrame>,
+}
+
+/// Per-frame state of a card's progress bar.
+#[derive(Clone, Copy)]
+enum BarFrame {
+    /// Filled share, gliding toward the latest report.
+    Fraction(f32),
+    /// Position in the sweep cycle, `0..1`; `None` when motion is off.
+    Sweep(Option<f32>),
+}
+
+fn sweep_cycle(elapsed: Duration) -> f32 {
+    (elapsed.as_secs_f32() / SWEEP.as_secs_f32()).fract()
+}
+
+/// A popup progress track; an unknown total sweeps a segment across it.
+fn progress_bar(bar: BarFrame, palette: &Palette) -> Div {
+    match bar {
+        BarFrame::Fraction(fraction) => {
+            components::progress_track(fraction * 100.0, None, 0, palette.accent, palette)
+        }
+        BarFrame::Sweep(cycle) => {
+            let radius = components::PROGRESS_TRACK_HEIGHT / 2.0;
+            // Without motion the segment rests in the middle of the track.
+            let start = cycle.map_or((1.0 - SWEEP_WIDTH) / 2.0, |cycle| {
+                fx::cubic_bezier(0.65, 0.0, 0.35, 1.0, f64::from(cycle)) as f32
+                    * (1.0 + SWEEP_WIDTH)
+                    - SWEEP_WIDTH
+            });
+            // Clip to the track by hand: GPUI masks are rectangular and would
+            // square off the rounded ends.
+            let left = start.clamp(0.0, 1.0);
+            let width = (start + SWEEP_WIDTH).clamp(0.0, 1.0) - left;
+            let mut track = div()
+                .relative()
+                .w_full()
+                .h(px(components::PROGRESS_TRACK_HEIGHT))
+                .flex_none()
+                .rounded(px(radius))
+                .bg(palette.accent.opacity(0.2));
+            if width > 0.0 {
+                track = track.child(
+                    div()
+                        .absolute()
+                        .top_0()
+                        .bottom_0()
+                        .left(relative(left))
+                        .w(relative(width))
+                        .rounded(px(radius))
+                        .bg(palette.accent),
+                );
+            }
+            track
+        }
+    }
 }
 
 impl ToastHost {
@@ -586,6 +710,9 @@ impl ToastHost {
                     .gap(px(8.0))
                     .children(buttons),
             );
+        }
+        if let Some(bar) = frame.progress {
+            text = text.child(progress_bar(bar, palette).mt(px(PROGRESS_GAP)));
         }
 
         let close = div()
@@ -642,7 +769,7 @@ impl ToastHost {
             .left(px(frame.x))
             .top(px(frame.y))
             .w(px(CARD_WIDTH))
-            .h(px(card.height))
+            .h(px(frame.height))
             .p(px(PADDING))
             .opacity(frame.alpha)
             .rounded(px(crate::popup::corner_radius_dip() as f32))

@@ -2565,3 +2565,24 @@ reset-rate-limited = リセットのリクエストが多すぎます。後で�
 reset-sign-in-again = リセットを使用するには Claude に再度ログインしてください。
 reset-cli-login-required = 同じアカウントの Claude CLI ログインを使用してリセットしてください。
 reset-invalid-grant = Claude が無効なリセット権を返しました。
+
+# src/updater.rs
+update-downloading = アップデートをダウンロード中
+
+# src/updater.rs
+update-download-progress = { $downloaded } / { $total }
+
+# src/updater.rs
+update-downloaded = { $downloaded } ダウンロード済み
+
+# src/updater.rs
+update-installing = アップデートをインストール中
+
+# src/updater.rs
+update-unpacking = ファイルを展開しています…
+
+# src/updater.rs
+update-restarting = Codex Minibar を再起動しています
+
+# src/updater.rs
+update-restarting-body = まもなくアプリが再び開きます。
