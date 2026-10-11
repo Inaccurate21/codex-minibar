@@ -254,6 +254,9 @@ fn handle_command(
         PopupCommand::SelectView(view) => {
             let _ = window.update(cx, |root, _, cx| root.select_view(view, cx));
         }
+        PopupCommand::StartHomeEditing => {
+            let _ = window.update(cx, |root, _, cx| root.set_home_editing(true, cx));
+        }
         PopupCommand::AppearanceChanged => {
             let _ = window.update(cx, |root, window, cx| root.appearance_changed(window, cx));
         }

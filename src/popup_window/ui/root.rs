@@ -335,7 +335,8 @@ impl PopupRoot {
         )
         .with_contrast(ui.popup_vscode_contrast)
         .with_tint(ui.popup_vscode_tint)
-        .with_borders(ui.popup_borders);
+        .with_borders(ui.popup_borders)
+        .with_window_border(ui.popup_window_border);
         let appearance = cx.observe_window_appearance(window, |this, window, cx| {
             this.refresh_palette(window);
             cx.notify();
@@ -487,6 +488,7 @@ impl PopupRoot {
             || self.palette.font_family != font
             || self.palette.material != material
             || self.palette.borders != self.ui.popup_borders
+            || self.palette.window_outline != self.ui.popup_window_border
             || self.palette.contrast != self.ui.popup_vscode_contrast
             || self.palette.tint != self.ui.popup_vscode_tint
             || (vscode.is_none()
@@ -495,7 +497,8 @@ impl PopupRoot {
             let palette = Palette::new(popup_theme, vscode, dark, self.accent, material, font)
                 .with_contrast(self.ui.popup_vscode_contrast)
                 .with_tint(self.ui.popup_vscode_tint)
-                .with_borders(self.ui.popup_borders);
+                .with_borders(self.ui.popup_borders)
+                .with_window_border(self.ui.popup_window_border);
             #[cfg(windows)]
             if (self.palette.material != material
                 || self.palette.backdrop_luminosity() != palette.backdrop_luminosity())
@@ -531,6 +534,7 @@ impl PopupRoot {
         .with_contrast(self.ui.popup_vscode_contrast)
         .with_tint(self.ui.popup_vscode_tint)
         .with_borders(self.ui.popup_borders)
+        .with_window_border(self.ui.popup_window_border)
     }
 
     /// Screen x of the visible popup capsule's left edge, in pixels.
@@ -619,6 +623,15 @@ impl PopupRoot {
                 self.finish_pager_animation();
             }
         }
+    }
+
+    /// Home edit mode reveals the widget grips; entering it opens Home.
+    pub(crate) fn set_home_editing(&mut self, editing: bool, cx: &mut Context<Self>) {
+        if editing {
+            self.navigate(PopupView::Home, cx);
+        }
+        self.home_editing = editing;
+        cx.notify();
     }
 
     pub(super) fn navigate(&mut self, view: PopupView, cx: &mut Context<Self>) {
@@ -1734,7 +1747,7 @@ impl Render for PopupRoot {
             )
             .child(shell)
             // A hairline keeps the capsule edge crisp against any wallpaper.
-            .children(palette.borders.then(|| {
+            .children(palette.window_border().then(|| {
                 div()
                     .absolute()
                     .inset_0()

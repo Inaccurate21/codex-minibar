@@ -810,7 +810,9 @@ compact = Compacte
 # src/settings_window/appearance.rs
 popup-corner-radius = Rayon du coin contextuel
 popup-borders = Bordures
-popup-borders-description = Afficher les contours de la fenêtre popup, des cartes et des contrôles
+popup-borders-description = Afficher les contours des cartes et des contrôles
+popup-window-border = Bordure de la fenêtre
+popup-window-border-description = Souligner le bord de la fenêtre popup
 popup-theme-contrast = Contraste
 popup-theme-contrast-description = Faire ressortir plus ou moins le texte et les contours des thèmes VS Code
 popup-theme-tint = Teinte
@@ -848,6 +850,11 @@ green = Vert
 
 # src/settings_window/appearance.rs
 teal = Bleu-vert
+
+# src/settings_window/customize.rs
+show-edit-button = Afficher le bouton Modifier dans la barre inférieure
+show-edit-button-description = Le mode édition affiche des poignées sur l'accueil pour réordonner les widgets. Lancez-le ici pour garder la barre inférieure compacte.
+start-editing = Commencer
 
 # src/settings_window/customize.rs
 use-two-columns = Utiliser deux colonnes

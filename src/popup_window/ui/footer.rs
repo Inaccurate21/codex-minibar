@@ -138,7 +138,16 @@ impl PopupRoot {
         let tabs = self.tab_specs();
         let step = button + spacing;
         let content_width = tabs.len() as f32 * step - spacing;
-        let action_count = 3.0 + f32::from(u8::from(self.ui.update_version.is_some()));
+        // Customize can hide the Edit button; it still appears as Done while
+        // editing (started from Settings) so edit mode can always be left.
+        let editing = self.home_editing;
+        let edit_presence = self.fx.toggle(
+            fx::key("footer-edit-presence"),
+            self.ui.show_edit_home_button || editing,
+            fx::NORMAL,
+        );
+        let action_count =
+            2.0 + edit_presence + f32::from(u8::from(self.ui.update_version.is_some()));
         let viewport_width = capsule_width
             - 2.0
             - size.tab_padding_left() as f32
@@ -202,15 +211,10 @@ impl PopupRoot {
             }))
             .child(strip);
 
-        let editing = self.home_editing;
-        let mut actions = div()
-            .flex()
-            .flex_row()
-            .items_center()
-            .flex_none()
-            .gap(px(size.action_spacing() as f32))
-            .child(self.render_refresh_button(button, size.icon_glyph_size() as f32, cx))
-            .child(self.render_action_button(
+        let gap = size.action_spacing() as f32;
+        let mut actions = div().flex().flex_row().items_center().flex_none();
+        if edit_presence > 0.0 {
+            let button_element = self.render_action_button(
                 "edit-home",
                 if editing {
                     "fluent-checkmark"
@@ -221,9 +225,32 @@ impl PopupRoot {
                 button,
                 size.icon_glyph_size() as f32,
                 editing,
-                cx.listener(|this, _: &ClickEvent, _, cx| this.toggle_home_editing(cx)),
+                cx.listener(|this, _: &ClickEvent, _, cx| {
+                    this.set_home_editing(!this.home_editing, cx)
+                }),
                 cx,
-            ))
+            );
+            // Grows in from the left edge of the actions so nothing jumps.
+            actions = actions.child(
+                div()
+                    .relative()
+                    .flex_none()
+                    .w(px((button + gap) * edit_presence))
+                    .h(px(button))
+                    .overflow_hidden()
+                    .opacity(edit_presence)
+                    .child(
+                        div()
+                            .absolute()
+                            .top_0()
+                            .right(px(gap))
+                            .child(button_element),
+                    ),
+            );
+        }
+        actions = actions
+            .child(self.render_refresh_button(button, size.icon_glyph_size() as f32, cx))
+            .child(div().w(px(gap)).flex_none())
             .child(self.render_action_button(
                 "settings",
                 "fluent-settings",
@@ -235,16 +262,18 @@ impl PopupRoot {
                 cx,
             ));
         if self.ui.update_version.is_some() {
-            actions = actions.child(self.render_action_button(
-                "update",
-                "fluent-arrow-download",
-                crate::i18n::tr("install-update").into(),
-                button,
-                size.icon_glyph_size() as f32,
-                true,
-                cx.listener(|this, _: &ClickEvent, _, _| this.install_update()),
-                cx,
-            ));
+            actions = actions
+                .child(div().w(px(gap)).flex_none())
+                .child(self.render_action_button(
+                    "update",
+                    "fluent-arrow-download",
+                    crate::i18n::tr("install-update").into(),
+                    button,
+                    size.icon_glyph_size() as f32,
+                    true,
+                    cx.listener(|this, _: &ClickEvent, _, _| this.install_update()),
+                    cx,
+                ));
         }
 
         div()
@@ -385,17 +414,6 @@ impl PopupRoot {
         }
         let _ = view_key;
         element.into_any_element()
-    }
-
-    /// Edit mode belongs to Home: entering it from another page opens Home.
-    fn toggle_home_editing(&mut self, cx: &mut Context<Self>) {
-        if self.home_editing {
-            self.home_editing = false;
-            cx.notify();
-            return;
-        }
-        self.navigate(PopupView::Home, cx);
-        self.home_editing = true;
     }
 
     fn reorder_provider_tab(&mut self, from: PopupView, to: PopupView, cx: &mut Context<Self>) {

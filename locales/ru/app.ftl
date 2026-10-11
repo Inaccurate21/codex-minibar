@@ -826,7 +826,9 @@ compact = Компактный
 # src/settings_window/appearance.rs
 popup-corner-radius = Радиус углов всплывающего окна
 popup-borders = Границы
-popup-borders-description = Обводка всплывающего окна, карточек и элементов управления
+popup-borders-description = Обводка карточек и элементов управления
+popup-window-border = Граница окна
+popup-window-border-description = Обводка края всплывающего окна
 popup-theme-contrast = Контраст
 popup-theme-contrast-description = Усиливает или ослабляет текст и обводки тем VS Code
 popup-theme-tint = Тонировка
@@ -864,6 +866,11 @@ green = Зелёный
 
 # src/settings_window/appearance.rs
 teal = Бирюзовый
+
+# src/settings_window/customize.rs
+show-edit-button = Кнопка «Изменить» в нижней панели
+show-edit-button-description = В режиме редактирования на главной появляются ручки для перетаскивания виджетов. Запускайте его отсюда, чтобы нижняя панель оставалась компактной.
+start-editing = Начать
 
 # src/settings_window/customize.rs
 use-two-columns = Использовать два столбца

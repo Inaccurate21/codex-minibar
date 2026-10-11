@@ -825,7 +825,9 @@ compact = Compact
 # src/settings_window/appearance.rs
 popup-corner-radius = Popup corner radius
 popup-borders = Borders
-popup-borders-description = Outline the popup window, cards and controls
+popup-borders-description = Outline cards and controls
+popup-window-border = Window border
+popup-window-border-description = Outline the edge of the popup window
 popup-theme-contrast = Contrast
 popup-theme-contrast-description = Make text and outlines of VS Code themes stand out more or less
 popup-theme-tint = Tint
@@ -863,6 +865,11 @@ green = Green
 
 # src/settings_window/appearance.rs
 teal = Teal
+
+# src/settings_window/customize.rs
+show-edit-button = Show Edit button in bottom bar
+show-edit-button-description = Edit mode reveals grips on Home to drag widgets into a new order. Start it here to keep the bottom bar compact.
+start-editing = Start editing
 
 # src/settings_window/customize.rs
 use-two-columns = Use two columns

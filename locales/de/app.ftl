@@ -809,7 +809,9 @@ compact = Kompakt
 # src/settings_window/appearance.rs
 popup-corner-radius = Popup-Eckenradius
 popup-borders = Rahmen
-popup-borders-description = Rahmen um Popup-Fenster, Karten und Steuerelemente anzeigen
+popup-borders-description = Rahmen um Karten und Steuerelemente anzeigen
+popup-window-border = Fensterrahmen
+popup-window-border-description = Rand des Popup-Fensters umranden
 popup-theme-contrast = Kontrast
 popup-theme-contrast-description = Text und Umrisse von VS Code-Designs stärker oder schwächer hervorheben
 popup-theme-tint = Tönung
@@ -847,6 +849,11 @@ green = Grün
 
 # src/settings_window/appearance.rs
 teal = Blaugrün
+
+# src/settings_window/customize.rs
+show-edit-button = Bearbeiten-Schaltfläche in der unteren Leiste anzeigen
+show-edit-button-description = Im Bearbeitungsmodus erscheinen Griffe auf der Startseite, um Widgets neu anzuordnen. Starte ihn hier, um die untere Leiste kompakt zu halten.
+start-editing = Bearbeitung starten
 
 # src/settings_window/customize.rs
 use-two-columns = Verwenden Sie zwei Spalten

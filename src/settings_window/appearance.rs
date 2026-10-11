@@ -11,8 +11,8 @@ use std::{
 use gpui::{
     AnyElement, App, AppContext, Context, Entity, Focusable, FontWeight, InteractiveElement,
     IntoElement, KeyDownEvent, ParentElement, Pixels, ScrollHandle, SharedString,
-    StatefulInteractiveElement, Styled, Subscription, Task, Window, canvas, div,
-    prelude::FluentBuilder, px, relative,
+    StatefulInteractiveElement, Styled, Subscription, Task, Transformation, Window, canvas, div,
+    prelude::FluentBuilder, px, radians, relative,
 };
 
 use super::input::{InputEvent, TextInput};
@@ -32,6 +32,8 @@ use crate::vscode_themes::VsCodeTheme;
 /// Popup theme cards per row.
 const THEME_COLUMNS: u16 = 3;
 const THEME_GAP: f32 = 12.0;
+/// Expansion key of the Appearance popup theme list.
+const POPUP_THEMES_EXPANDED: &str = "appearance-popup-themes";
 /// How long after first showing up a VS Code theme card may play its
 /// entrance; one scrolled into view later just shows.
 const THEME_APPEAR_WINDOW: Duration = Duration::from_millis(400);
@@ -159,6 +161,7 @@ impl ThemeGridMetrics {
 }
 
 /// One card in the popup theme grid.
+#[derive(Clone)]
 pub(super) enum ThemeChoice {
     Builtin(PopupTheme),
     VsCode(Arc<VsCodeTheme>),
@@ -359,70 +362,50 @@ pub(super) trait ThemePicker: ThemeHost {
     }
 
     /// Built-in designs followed by every installed VS Code theme, in rows
-    /// of equal columns. Rows well outside the page viewport render as
+    /// of equal columns. Collapsed, only the first row shows and the rest
+    /// glide open below it. Rows well outside the page viewport render as
     /// spacers of their measured height: with many themes installed, every
     /// card rebuilt each frame of a scroll glide or hover fade stalls it.
-    fn popup_theme_grid(&self, k: &Kit, cx: &mut Context<Self>) -> AnyElement {
+    fn popup_theme_grid(&self, k: &mut Kit, expanded: bool, cx: &mut Context<Self>) -> AnyElement {
         let installed = crate::vscode_themes::installed();
-        let mut choices = PopupTheme::ALL
+        let choices = PopupTheme::ALL
             .into_iter()
             .map(ThemeChoice::Builtin)
-            .chain(installed.iter().cloned().map(ThemeChoice::VsCode));
-        let count = PopupTheme::ALL.len() + installed.len();
-        let row_count = count.div_ceil(usize::from(THEME_COLUMNS));
+            .chain(installed.iter().cloned().map(ThemeChoice::VsCode))
+            .collect::<Vec<_>>();
+        let row_count = choices.len().div_ceil(usize::from(THEME_COLUMNS));
         let metrics = Rc::clone(&self.theme_browser().grid);
         let scroll = k.page_scroll.clone();
         metrics.begin_frame(k.fx.frame(), row_count, &installed);
         let visible = metrics.visible_rows(row_count, scroll.as_ref());
         // Once per frame, not per card: see `vscode_palette`.
         let accent = crate::theme::accent_ramp(self.settings().accent_color);
-        let mut rows = Vec::with_capacity(row_count);
-        for (row, shown) in visible.into_iter().enumerate() {
-            let members = choices
-                .by_ref()
-                .take(usize::from(THEME_COLUMNS))
-                .collect::<Vec<_>>();
-            let height = metrics.row_height(row);
-            if !shown && let Some(height) = height {
-                rows.push(div().w_full().h(px(height)).into_any_element());
-                continue;
-            }
-            let cards = members
-                .into_iter()
-                .map(|choice| self.popup_theme_card(k, choice, accent, &metrics, cx))
-                .collect::<Vec<_>>();
-            let measure = Rc::clone(&metrics);
-            rows.push(
+        let first = (row_count > 0)
+            .then(|| self.popup_theme_row(k, &choices, 0, visible[0], accent, &metrics, cx));
+        let rest = if row_count > 1 {
+            kit::collapsible(k, fx::key("popup-theme-grid-rest"), expanded, |k| {
                 div()
-                    .relative()
+                    .flex()
+                    .flex_col()
+                    .gap(px(THEME_GAP))
+                    .pt(px(THEME_GAP))
                     .w_full()
-                    .child(
-                        div()
-                            .grid()
-                            .grid_cols(THEME_COLUMNS)
-                            .gap(px(THEME_GAP))
-                            .w_full()
-                            .children(cards),
-                    )
-                    .child(
-                        canvas(
-                            move |bounds, _, _| measure.set_row_height(row, bounds.size.height),
-                            |_, _, _, _| {},
-                        )
-                        .absolute()
-                        .inset_0(),
-                    )
-                    .into_any_element(),
-            );
-        }
+                    .children((1..row_count).map(|row| {
+                        self.popup_theme_row(k, &choices, row, visible[row], accent, &metrics, cx)
+                    }))
+                    .into_any_element()
+            })
+        } else {
+            None
+        };
         let measure = Rc::clone(&metrics);
         div()
             .relative()
             .flex()
             .flex_col()
-            .gap(px(THEME_GAP))
             .w_full()
-            .children(rows)
+            .children(first)
+            .children(rest)
             .child(
                 canvas(
                     move |bounds, _, _| {
@@ -431,6 +414,53 @@ pub(super) trait ThemePicker: ThemeHost {
                             f32::from(bounds.origin.y) - f32::from(scroll.offset().y)
                         }));
                     },
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .inset_0(),
+            )
+            .into_any_element()
+    }
+
+    /// One row of the popup theme grid, or a spacer of its measured height
+    /// when it is far outside the viewport.
+    #[allow(clippy::too_many_arguments)]
+    fn popup_theme_row(
+        &self,
+        k: &Kit,
+        choices: &[ThemeChoice],
+        row: usize,
+        shown: bool,
+        accent: crate::theme::AccentRamp,
+        metrics: &Rc<ThemeGridMetrics>,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        if !shown && let Some(height) = metrics.row_height(row) {
+            return div().w_full().h(px(height)).into_any_element();
+        }
+        let columns = usize::from(THEME_COLUMNS);
+        let cards = choices
+            .iter()
+            .skip(row * columns)
+            .take(columns)
+            .cloned()
+            .map(|choice| self.popup_theme_card(k, choice, accent, metrics, cx))
+            .collect::<Vec<_>>();
+        let measure = Rc::clone(metrics);
+        div()
+            .relative()
+            .w_full()
+            .child(
+                div()
+                    .grid()
+                    .grid_cols(THEME_COLUMNS)
+                    .gap(px(THEME_GAP))
+                    .w_full()
+                    .children(cards),
+            )
+            .child(
+                canvas(
+                    move |bounds, _, _| measure.set_row_height(row, bounds.size.height),
                     |_, _, _, _| {},
                 )
                 .absolute()
@@ -668,6 +698,7 @@ impl SettingsWindow {
         let time_format = s.time_format;
         let material = s.popup_background_material;
         let borders = s.popup_borders;
+        let window_border = s.popup_window_border;
         let bar = s.bottom_bar_size;
         let radius = s.popup_corner_radius;
         let animations = s.animations_enabled;
@@ -689,10 +720,6 @@ impl SettingsWindow {
                     .description(k, crate::i18n::tr("windows-follows-your-system-accent"))
                     .detail(div().pt(px(12.0)).child(colors).into_any_element())
                     .render(k),
-                Row::new("appearance-font", crate::i18n::tr("font"))
-                    .description(k, crate::i18n::tr("any-font-installed-on-this-pc"))
-                    .trailing(font)
-                    .render(k),
                 Row::new("appearance-time", crate::i18n::tr("time-format"))
                     .trailing(kit::segmented(
                         k,
@@ -713,17 +740,46 @@ impl SettingsWindow {
             ]
         });
 
-        let popup_theme_cards = self.popup_theme_grid(k, cx);
+        // Collapsed by default: the first row of themes stays visible and
+        // the header glides the rest open.
+        let themes_expanded = self.is_expanded(POPUP_THEMES_EXPANDED);
+        let popup_theme_cards = self.popup_theme_grid(k, themes_expanded, cx);
         let vscode_row = self.vscode_themes_row(k, cx);
-        let theme_row = Row::new("appearance-popup-theme", crate::i18n::tr("popup-theme"))
+        let turn = k.fx.toggle(
+            fx::key(("expander", POPUP_THEMES_EXPANDED)),
+            themes_expanded,
+            fx::NORMAL,
+        );
+        let chevron = kit::icon("caret-down-bold", 12.0, k.theme.text_secondary)
+            .with_transformation(Transformation::rotate(radians(std::f32::consts::PI * turn)));
+        let theme_header = Row::new("appearance-popup-theme", crate::i18n::tr("popup-theme"))
             .description(k, crate::i18n::tr("popup-theme-description"))
-            .detail(
+            .trailing(
                 div()
-                    .pt(px(12.0))
-                    .child(popup_theme_cards)
+                    .size(px(28.0))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(chevron)
                     .into_any_element(),
             )
+            .on_click(Self::h(cx, move |this, (), _, cx| {
+                this.set_expanded(POPUP_THEMES_EXPANDED, !themes_expanded);
+                cx.notify();
+            }))
             .render(k);
+        // Kept out of the header row so picking a theme never toggles it.
+        let theme_row = div()
+            .flex()
+            .flex_col()
+            .child(theme_header)
+            .child(
+                div()
+                    .px(px(kit::ROW_PADDING_X))
+                    .pb(px(14.0))
+                    .child(popup_theme_cards),
+            )
+            .into_any_element();
         // These only tune VS Code themes, so they glide in with one; the
         // tint also needs a translucent backdrop.
         let contrast_row = self.vscode_percent_row(
@@ -801,6 +857,12 @@ impl SettingsWindow {
         let radius_value = radius.dip();
         let popup = kit::card_of(k, |k| {
             vec![
+                // Only the popup uses the custom font; Settings keep the
+                // system UI font.
+                Row::new("appearance-font", crate::i18n::tr("font"))
+                    .description(k, crate::i18n::tr("any-font-installed-on-this-pc"))
+                    .trailing(font)
+                    .render(k),
                 Row::new("appearance-material", crate::i18n::tr("popup-background"))
                     .trailing(kit::segmented(
                         k,
@@ -861,16 +923,41 @@ impl SettingsWindow {
                             .into_any_element(),
                     )
                     .render(k),
-                kit::toggle_row(
-                    k,
-                    "appearance-popup-borders",
-                    crate::i18n::tr("popup-borders"),
-                    Some(crate::i18n::tr("popup-borders-description").into()),
-                    borders,
-                    Self::h(cx, |this, value: bool, _, cx| {
-                        this.edit(cx, move |settings| settings.popup_borders = value)
-                    }),
-                ),
+                {
+                    let borders_row = kit::toggle_row(
+                        k,
+                        "appearance-popup-borders",
+                        crate::i18n::tr("popup-borders"),
+                        Some(crate::i18n::tr("popup-borders-description").into()),
+                        borders,
+                        Self::h(cx, |this, value: bool, _, cx| {
+                            this.edit(cx, move |settings| settings.popup_borders = value)
+                        }),
+                    );
+                    // The window hairline stays independent: borderless cards
+                    // can still sit in an outlined window.
+                    let window_border_row = kit::toggle_row(
+                        k,
+                        "appearance-popup-window-border",
+                        crate::i18n::tr("popup-window-border"),
+                        Some(crate::i18n::tr("popup-window-border-description").into()),
+                        window_border,
+                        Self::h(cx, |this, value: bool, _, cx| {
+                            this.edit(cx, move |settings| settings.popup_window_border = value)
+                        }),
+                    );
+                    let divider = div()
+                        .px(px(kit::ROW_PADDING_X))
+                        .child(kit::divider(k))
+                        .into_any_element();
+                    div()
+                        .flex()
+                        .flex_col()
+                        .child(borders_row)
+                        .child(divider)
+                        .child(div().pl(px(28.0)).child(window_border_row))
+                        .into_any_element()
+                },
             ]
         });
 
@@ -896,8 +983,8 @@ impl SettingsWindow {
         vec![
             look,
             kit::section_heading(k, crate::i18n::tr("popup")),
-            themes,
             popup,
+            themes,
             kit::section_heading(k, crate::i18n::tr("motion")),
             motion,
         ]

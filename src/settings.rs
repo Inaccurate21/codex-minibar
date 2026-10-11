@@ -1767,8 +1767,10 @@ pub struct Settings {
     /// Opacity in percent of a VS Code theme's background over the Mica or
     /// Acrylic backdrop.
     pub popup_vscode_tint: u16,
-    /// Outlines around popup cards, controls and the window.
+    /// Outlines around popup cards and controls.
     pub popup_borders: bool,
+    /// Hairline around the popup window itself, independent of the borders.
+    pub popup_window_border: bool,
     /// 12-hour or 24-hour clocks. Missing values follow the Windows locale.
     pub time_format: TimeFormat,
     /// Provider instances in the user's order for the Settings sidebar and
@@ -1816,6 +1818,8 @@ pub struct Settings {
     /// Last selected Usage Stats time range on the Home tab.
     pub total_spend_period: TotalSpendPeriod,
     pub show_account_name: bool,
+    /// Shows the Edit Home button in the popup's bottom bar.
+    pub show_edit_home_button: bool,
     pub tray_widgets: Vec<TrayWidget>,
     pub notifications: NotificationSettings,
     pub history_retention_days: u16,
@@ -1847,6 +1851,7 @@ impl Default for Settings {
             popup_vscode_contrast: POPUP_VSCODE_CONTRAST_DEFAULT,
             popup_vscode_tint: POPUP_VSCODE_TINT_DEFAULT,
             popup_borders: true,
+            popup_window_border: true,
             time_format: TimeFormat::from_windows(),
             instances: ProviderKind::ALL
                 .into_iter()
@@ -1875,6 +1880,7 @@ impl Default for Settings {
             total_spend_presentation: TotalSpendPresentation::default(),
             total_spend_period: TotalSpendPeriod::default(),
             show_account_name: false,
+            show_edit_home_button: true,
             // An empty list intentionally means "show the ordinary app icon".
             tray_widgets: Vec::new(),
             notifications: NotificationSettings::default(),

@@ -549,7 +549,9 @@ compact = Compacto
 
 popup-corner-radius = Radio de las esquinas de la ventana emergente
 popup-borders = Bordes
-popup-borders-description = Contornear la ventana emergente, las tarjetas y los controles
+popup-borders-description = Contornear las tarjetas y los controles
+popup-window-border = Borde de la ventana
+popup-window-border-description = Contornear el borde de la ventana emergente
 popup-theme-contrast = Contraste
 popup-theme-contrast-description = Resalta más o menos el texto y los contornos de los temas de VS Code
 popup-theme-tint = Tinte
@@ -576,6 +578,10 @@ orange = Naranja
 green = Verde
 
 teal = Verde azulado
+
+show-edit-button = Mostrar el botón Editar en la barra inferior
+show-edit-button-description = El modo de edición muestra asas en Inicio para arrastrar los widgets a un nuevo orden. Inícialo aquí para mantener compacta la barra inferior.
+start-editing = Empezar a editar
 
 use-two-columns = Usar dos columnas
 

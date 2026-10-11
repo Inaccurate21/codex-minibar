@@ -315,6 +315,7 @@ pub(crate) struct UiState {
     pub(super) popup_vscode_contrast: u16,
     pub(super) popup_vscode_tint: u16,
     pub(super) popup_borders: bool,
+    pub(super) popup_window_border: bool,
     pub(super) time_format: TimeFormat,
     pub(super) last_activation: String,
     pub(super) provider_errors: HashMap<ProviderId, String>,
@@ -348,6 +349,7 @@ pub(crate) struct UiState {
     pub(super) total_spend_presentation: TotalSpendPresentation,
     pub(super) total_spend_period: TotalSpendPeriod,
     pub(super) show_account_name: bool,
+    pub(super) show_edit_home_button: bool,
     /// Every configured instance in display order, enabled or not.
     pub(super) instances: Vec<ProviderInstance>,
     pub(super) popup_tab_mode: PopupTabMode,
@@ -375,6 +377,7 @@ impl Default for UiState {
             popup_vscode_contrast: crate::settings::POPUP_VSCODE_CONTRAST_DEFAULT,
             popup_vscode_tint: crate::settings::POPUP_VSCODE_TINT_DEFAULT,
             popup_borders: true,
+            popup_window_border: true,
             time_format: TimeFormat::from_windows(),
             last_activation: crate::i18n::tr("never").into(),
             provider_errors: HashMap::new(),
@@ -397,6 +400,7 @@ impl Default for UiState {
             total_spend_presentation: TotalSpendPresentation::default(),
             total_spend_period: TotalSpendPeriod::default(),
             show_account_name: false,
+            show_edit_home_button: true,
             instances: Settings::default().instances,
             popup_tab_mode: PopupTabMode::default(),
             grouped_tab_selection: Default::default(),
@@ -442,6 +446,7 @@ impl UiState {
         self.popup_vscode_contrast = settings.popup_vscode_contrast;
         self.popup_vscode_tint = settings.popup_vscode_tint;
         self.popup_borders = settings.popup_borders;
+        self.popup_window_border = settings.popup_window_border;
         self.time_format = settings.time_format;
         self.show_used_percentage = settings.show_used_percentage;
         self.show_usage_values = settings.show_usage_values;
@@ -454,6 +459,7 @@ impl UiState {
         self.total_spend_presentation = settings.total_spend_presentation;
         self.total_spend_period = settings.total_spend_period;
         self.show_account_name = settings.show_account_name;
+        self.show_edit_home_button = settings.show_edit_home_button;
         self.instances = settings.instances.clone();
         self.popup_tab_mode = settings.popup_tab_mode;
         self.grouped_tab_selection = settings.grouped_tab_selection.clone();

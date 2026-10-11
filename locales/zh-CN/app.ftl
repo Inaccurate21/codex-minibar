@@ -546,7 +546,9 @@ compact = 紧凑
 
 popup-corner-radius = 弹出窗口圆角半径
 popup-borders = 边框
-popup-borders-description = 为弹出窗口、卡片和控件绘制轮廓
+popup-borders-description = 为卡片和控件绘制轮廓
+popup-window-border = 窗口边框
+popup-window-border-description = 为弹出窗口边缘绘制轮廓
 popup-theme-contrast = 对比度
 popup-theme-contrast-description = 增强或减弱 VS Code 主题中文字和轮廓的对比
 popup-theme-tint = 着色
@@ -573,6 +575,10 @@ orange = 橙色
 green = 绿色
 
 teal = 青色
+
+show-edit-button = 在底部栏显示编辑按钮
+show-edit-button-description = 编辑模式会在主页上显示拖动手柄，以便重新排列小组件。从这里开始编辑可让底部栏保持简洁。
+start-editing = 开始编辑
 
 use-two-columns = 使用双列
 

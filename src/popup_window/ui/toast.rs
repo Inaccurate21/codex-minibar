@@ -664,7 +664,7 @@ impl ToastHost {
             .bg(palette.solid_background)
             // The popup capsule's hairline.
             .border_1()
-            .border_color(match (palette.borders, palette.dark) {
+            .border_color(match (palette.window_border(), palette.dark) {
                 (false, _) => gpui::transparent_black(),
                 (true, true) => rgba8(255, 255, 255, 0x14),
                 (true, false) => rgba8(0, 0, 0, 0x12),

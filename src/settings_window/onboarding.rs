@@ -762,7 +762,7 @@ impl OnboardingWindow {
                     .render(k),
             ]
         });
-        let grid = self.popup_theme_grid(k, cx);
+        let grid = self.popup_theme_grid(k, true, cx);
         let popup = kit::row_card(
             k,
             Row::new("onboarding-popup-theme", crate::i18n::tr("popup-theme"))
@@ -814,7 +814,7 @@ impl Render for OnboardingWindow {
             self.settings.theme,
             self.settings.accent_color,
             window.appearance(),
-            self.fonts.with_text(self.settings.font_family.as_deref()),
+            self.fonts.clone(),
         );
         if self.backdrop.mica() {
             theme = theme.with_mica();

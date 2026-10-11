@@ -1180,8 +1180,16 @@ popup-corner-radius = { "" }
 popup-borders = { "" }
 
 # English source:
-# popup-borders-description = Outline the popup window, cards and controls
+# popup-borders-description = Outline cards and controls
 popup-borders-description = { "" }
+
+# English source:
+# popup-window-border = Window border
+popup-window-border = { "" }
+
+# English source:
+# popup-window-border-description = Outline the edge of the popup window
+popup-window-border-description = { "" }
 
 # English source:
 # popup-theme-contrast = Contrast
@@ -1242,6 +1250,18 @@ green = { "" }
 # English source:
 # teal = Teal
 teal = { "" }
+
+# English source:
+# show-edit-button = Show Edit button in bottom bar
+show-edit-button = { "" }
+
+# English source:
+# show-edit-button-description = Edit mode reveals grips on Home to drag widgets into a new order. Start it here to keep the bottom bar compact.
+show-edit-button-description = { "" }
+
+# English source:
+# start-editing = Start editing
+start-editing = { "" }
 
 # English source:
 # use-two-columns = Use two columns

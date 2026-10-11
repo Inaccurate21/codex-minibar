@@ -77,6 +77,8 @@ pub(crate) enum PopupCommand {
     },
     Hide,
     SelectView(PopupView),
+    /// Enter Home edit mode, opening Home.
+    StartHomeEditing,
     AppearanceChanged,
     Reposition,
     /// Another window took the foreground; restore the popup to the top of
@@ -138,6 +140,14 @@ fn request_view(view: PendingPopupView) {
     } else if let Ok(mut pending) = PENDING_POPUP_VIEW.lock() {
         *pending = Some(view);
     }
+}
+
+/// Shows the popup in Home edit mode, wherever the request comes from.
+pub(crate) fn start_home_editing() {
+    if !popup::is_visible() || popup::is_closing() {
+        popup::show_near_cursor();
+    }
+    send_command(PopupCommand::StartHomeEditing);
 }
 
 fn take_popup_view_request() -> Option<PendingPopupView> {

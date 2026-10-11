@@ -806,7 +806,9 @@ compact = コンパクト
 # src/settings_window/appearance.rs
 popup-corner-radius = ポップアップコーナー半径
 popup-borders = 枠線
-popup-borders-description = ポップアップ、カード、コントロールに枠線を表示します
+popup-borders-description = カードとコントロールに枠線を表示します
+popup-window-border = ウィンドウの枠線
+popup-window-border-description = ポップアップウィンドウの縁に枠線を表示します
 popup-theme-contrast = コントラスト
 popup-theme-contrast-description = VS Code テーマの文字と枠線の強さを調整します
 popup-theme-tint = 色合い
@@ -844,6 +846,11 @@ green = 緑
 
 # src/settings_window/appearance.rs
 teal = 青緑
+
+# src/settings_window/customize.rs
+show-edit-button = 下部バーに編集ボタンを表示
+show-edit-button-description = 編集モードではホームにハンドルが表示され、ウィジェットをドラッグして並べ替えられます。ここから開始すれば下部バーをすっきり保てます。
+start-editing = 編集を開始
 
 # src/settings_window/customize.rs
 use-two-columns = 2 つの列を使用する

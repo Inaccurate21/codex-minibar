@@ -214,8 +214,10 @@ pub(crate) struct Palette {
     pub(crate) chart_grid: Hsla,
     pub(crate) mono_provider_icon: Hsla,
     pub(crate) material: PopupBackgroundMaterial,
-    /// Card, control and window outlines are drawn.
+    /// Card and control outlines are drawn.
     pub(crate) borders: bool,
+    /// The window hairline is drawn, independently of `borders`.
+    pub(crate) window_outline: bool,
     /// Contrast percent applied by [`Palette::with_contrast`].
     pub(crate) contrast: u16,
     /// Backdrop tint percent applied by [`Palette::with_tint`].
@@ -352,6 +354,17 @@ impl Palette {
         }
         self.borders = borders;
         self
+    }
+
+    /// The window hairline is set apart from the card and control borders.
+    pub(crate) fn with_window_border(mut self, outline: bool) -> Self {
+        self.window_outline = outline;
+        self
+    }
+
+    /// Whether the popup and toast windows draw their edge hairline.
+    pub(crate) fn window_border(&self) -> bool {
+        self.window_outline
     }
 
     /// Accent fill this theme paints with; Vercel is monochrome.
@@ -501,6 +514,7 @@ impl Palette {
             },
             material,
             borders: true,
+            window_outline: true,
             contrast: POPUP_VSCODE_CONTRAST_DEFAULT,
             tint: POPUP_VSCODE_TINT_DEFAULT,
             vscode: None,
@@ -564,6 +578,7 @@ impl Palette {
             mono_provider_icon: gray_900,
             material,
             borders: true,
+            window_outline: true,
             contrast: POPUP_VSCODE_CONTRAST_DEFAULT,
             tint: POPUP_VSCODE_TINT_DEFAULT,
             vscode: None,
@@ -754,6 +769,7 @@ impl Palette {
             mono_provider_icon: text_secondary,
             material,
             borders: true,
+            window_outline: true,
             contrast: POPUP_VSCODE_CONTRAST_DEFAULT,
             tint: POPUP_VSCODE_TINT_DEFAULT,
             vscode: Some(theme),

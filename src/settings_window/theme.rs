@@ -118,14 +118,6 @@ impl Fonts {
             ),
         }
     }
-
-    /// Swaps the text family for the user's font; mono and icon fonts stay.
-    pub(crate) fn with_text(&self, custom: Option<&str>) -> Self {
-        Self {
-            text: crate::popup_window::ui::theme::ui_font_family(custom, &self.text),
-            ..self.clone()
-        }
-    }
 }
 
 impl Theme {

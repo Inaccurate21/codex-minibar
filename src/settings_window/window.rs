@@ -1287,7 +1287,7 @@ impl Render for SettingsWindow {
             self.settings.theme,
             self.settings.accent_color,
             window.appearance(),
-            self.fonts.with_text(self.settings.font_family.as_deref()),
+            self.fonts.clone(),
         );
         if self.backdrop.mica() {
             theme = theme.with_mica();

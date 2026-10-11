@@ -5,7 +5,7 @@ use gpui::{
     AnyElement, Context, FontWeight, IntoElement, ParentElement, SharedString, Styled, div, px,
 };
 
-use super::kit::{self, Kit, Row};
+use super::kit::{self, Button, Kit, Row};
 use super::window::SettingsWindow;
 use crate::settings::{PopupTabMode, ProviderInstance, Settings, TotalSpendPresentation};
 
@@ -37,19 +37,50 @@ impl SettingsWindow {
         k: &mut Kit,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
+        let show_edit_button = self.settings.show_edit_home_button;
         let layout = kit::card_of(k, |k| {
-            vec![bool_row(
-                self,
+            // Starting edit mode here works whether or not the bottom bar
+            // shows its Edit button, so that button can be hidden.
+            let start = Button::new("customize-start-editing", crate::i18n::tr("start-editing"))
+                .with_icon("pencil-simple-fill")
+                .on_click(Self::h(cx, |_, (), _, _| {
+                    crate::popup_window::start_home_editing()
+                }))
+                .render(k);
+            let set_shown = |this: &mut Self, value: bool, cx: &mut Context<Self>| {
+                this.edit(cx, move |settings| settings.show_edit_home_button = value)
+            };
+            let switch = kit::toggle(
                 k,
-                cx,
-                "customize-two-columns",
-                crate::i18n::tr("use-two-columns"),
-                Some(crate::i18n::tr(
-                    "widen-home-and-usage-drag-home-blocks-between-columns-provider-ta",
-                )),
-                |s| s.popup_two_columns,
-                |s, v| s.popup_two_columns = v,
-            )]
+                "customize-edit-button",
+                show_edit_button,
+                false,
+                Self::h(cx, move |this, value: bool, _, cx| {
+                    set_shown(this, value, cx)
+                }),
+            );
+            vec![
+                Row::new("customize-edit-button", crate::i18n::tr("show-edit-button"))
+                    .description(k, crate::i18n::tr("show-edit-button-description"))
+                    .trailing(start)
+                    .trailing(switch)
+                    .on_click(Self::h(cx, move |this, (), _, cx| {
+                        set_shown(this, !show_edit_button, cx)
+                    }))
+                    .render(k),
+                bool_row(
+                    self,
+                    k,
+                    cx,
+                    "customize-two-columns",
+                    crate::i18n::tr("use-two-columns"),
+                    Some(crate::i18n::tr(
+                        "widen-home-and-usage-drag-home-blocks-between-columns-provider-ta",
+                    )),
+                    |s| s.popup_two_columns,
+                    |s, v| s.popup_two_columns = v,
+                ),
+            ]
         });
         let tab_mode = self.settings.popup_tab_mode;
         let tabs = kit::card_of(k, |k| {

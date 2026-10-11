@@ -549,7 +549,9 @@ compact = Compacto
 
 popup-corner-radius = Raio dos cantos do popup
 popup-borders = Bordas
-popup-borders-description = Contornar a janela pop-up, os cartões e os controles
+popup-borders-description = Contornar os cartões e os controles
+popup-window-border = Borda da janela
+popup-window-border-description = Contornar a borda da janela pop-up
 popup-theme-contrast = Contraste
 popup-theme-contrast-description = Destacar mais ou menos o texto e os contornos dos temas do VS Code
 popup-theme-tint = Tonalidade
@@ -576,6 +578,10 @@ orange = Laranja
 green = Verde
 
 teal = Verde-azulado
+
+show-edit-button = Mostrar o botão Editar na barra inferior
+show-edit-button-description = O modo de edição mostra alças no Início para arrastar os widgets para uma nova ordem. Inicie-o aqui para manter a barra inferior compacta.
+start-editing = Começar a editar
 
 use-two-columns = Usar duas colunas
 
