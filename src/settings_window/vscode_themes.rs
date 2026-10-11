@@ -94,6 +94,8 @@ pub(super) struct ThemeBrowser {
     previewing: Option<String>,
     /// The just-opened result kept in view while it settles.
     revealing: Option<Reveal>,
+    /// Row geometry of the installed popup theme grid.
+    pub(super) grid: Rc<super::appearance::ThemeGridMetrics>,
 }
 
 /// A window that hosts the theme pickers: the Settings Appearance page and

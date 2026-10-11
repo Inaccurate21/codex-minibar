@@ -131,6 +131,8 @@ pub(super) struct Host {
     pub(super) width: Spring,
     pub(super) offset: f32,
     pub(super) last_region: Option<(i32, i32, i32, i32, i32)>,
+    /// Capsule pixels last published for outside-click tests.
+    last_surface: Option<(i32, i32, i32, i32)>,
     pub(super) scale: f32,
     /// Previous frame of the open slide; long gaps are not counted as motion.
     pub(super) slide_frame: Option<Instant>,
@@ -151,6 +153,7 @@ impl Host {
             width: Spring::at(f64::from(crate::popup::POPUP_WIDTH)),
             offset: 0.0,
             last_region: None,
+            last_surface: None,
             scale: 1.0,
             slide_frame: None,
             prewarm_frames: 0,
@@ -1062,8 +1065,17 @@ impl PopupRoot {
         (width, height, offset)
     }
 
-    /// Clip the HWND to the capsule and publish its screen bounds.
-    fn apply_region(&mut self, window: &Window, x: f32, y: f32, width: f32, height: f32) {
+    /// Clip the HWND to `clip`, keep the backdrop on the capsule and
+    /// publish the capsule's screen bounds.
+    fn apply_region(
+        &mut self,
+        window: &Window,
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        clip: (f32, f32, f32, f32),
+    ) {
         #[cfg(windows)]
         {
             let Some(hwnd) = self.host.hwnd else {
@@ -1110,38 +1122,77 @@ impl PopupRoot {
                 }
                 return;
             }
-            let left = ((x * scale).round() as i32).clamp(0, window_w);
-            let right = (((x + width) * scale).round() as i32).clamp(left, window_w);
-            let top = ((y * scale).round() as i32).clamp(0, window_h);
-            let bottom = (((y + height) * scale).round() as i32).clamp(top, window_h);
+            let pixels = |x: f32, y: f32, width: f32, height: f32| {
+                let left = ((x * scale).round() as i32).clamp(0, window_w);
+                let right = (((x + width) * scale).round() as i32).clamp(left, window_w);
+                let top = ((y * scale).round() as i32).clamp(0, window_h);
+                let bottom = (((y + height) * scale).round() as i32).clamp(top, window_h);
+                (left, top, right, bottom)
+            };
+            let surface = pixels(x, y, width, height);
+            let (left, top, right, bottom) = pixels(clip.0, clip.1, clip.2, clip.3);
             let radius = (crate::popup::corner_radius_dip() as f32 * scale).round() as i32;
             let region = (left, top, right, bottom, radius);
-            if self.host.last_region == Some(region) {
-                return;
+            let region_changed = self.host.last_region != Some(region);
+            if region_changed {
+                self.host.last_region = Some(region);
+                super::win32::set_region(
+                    hwnd,
+                    (right > left && bottom > top).then_some(super::win32::Rect {
+                        left,
+                        top,
+                        right,
+                        bottom,
+                    }),
+                    radius,
+                );
             }
-            self.host.last_region = Some(region);
-            super::win32::set_region(
-                hwnd,
-                (right > left && bottom > top).then_some(super::win32::Rect {
-                    left,
-                    top,
-                    right,
-                    bottom,
-                }),
-                radius,
-            );
-            let origin = super::win32::window_rect(hwnd);
-            crate::popup::publish_surface_bounds(
-                origin.left + left,
-                origin.top + top,
-                origin.left + right,
-                origin.top + bottom,
-            );
+            // The clip can stay put while the capsule resizes inside it;
+            // outside clicks still go by the visible capsule.
+            if region_changed || self.host.last_surface != Some(surface) {
+                self.host.last_surface = Some(surface);
+                let (left, top, right, bottom) = surface;
+                let origin = super::win32::window_rect(hwnd);
+                crate::popup::publish_surface_bounds(
+                    origin.left + left,
+                    origin.top + top,
+                    origin.left + right,
+                    origin.top + bottom,
+                );
+            }
         }
         #[cfg(not(windows))]
         {
-            let _ = (window, x, y, width, height);
+            let _ = (window, x, y, width, height, clip);
         }
+    }
+
+    /// The HWND clip for this frame. `SetWindowRgn` makes DWM recompose the
+    /// window synchronously, too slow to repeat on every frame of a shell
+    /// resize (Home <-> Usage swings the height across most of the screen).
+    /// While the size springs run, clip once to the union of the current
+    /// and final capsule; the capsule paints its own rounded edge and the
+    /// rest of the clip stays transparent.
+    fn region_bounds(
+        &self,
+        capsule: (f32, f32, f32, f32),
+        viewport: (f32, f32),
+        offset: f32,
+    ) -> (f32, f32, f32, f32) {
+        let settled = self.host.width.settled && self.host.height.settled;
+        if self.host.phase != Phase::Open || settled {
+            return capsule;
+        }
+        let (x, y, width, height) = capsule;
+        let target_w = self.host.width.target as f32;
+        let target_h = (self.host.height.target as f32).min(viewport.1);
+        let target_x = viewport.0 - self.host.margin() - target_w + offset;
+        let target_y = (viewport.1 - target_h).max(0.0);
+        let left = x.min(target_x);
+        let top = y.min(target_y);
+        let right = (x + width).max(target_x + target_w);
+        let bottom = (y + height).max(target_y + target_h);
+        (left, top, right - left, bottom - top)
     }
 
     // ----- hover / tooltip helpers -------------------------------------------
@@ -1529,7 +1580,12 @@ impl Render for PopupRoot {
         let capsule_y = (viewport_h - capsule_h).max(0.0);
         self.capsule_origin = point(px(capsule_x), px(capsule_y));
         self.capsule_size = (capsule_w, capsule_h);
-        self.apply_region(window, capsule_x, capsule_y, capsule_w, capsule_h);
+        let clip = self.region_bounds(
+            (capsule_x, capsule_y, capsule_w, capsule_h),
+            (viewport_w, viewport_h),
+            offset,
+        );
+        self.apply_region(window, capsule_x, capsule_y, capsule_w, capsule_h, clip);
 
         let radius = crate::popup::corner_radius_dip() as f32;
         let body_viewport_h = (capsule_h - self.chrome_height()).max(0.0);

@@ -207,6 +207,11 @@ impl Fx {
         self.enabled
     }
 
+    /// Counts `begin_frame` calls, so callers can tell consecutive frames.
+    pub(crate) fn frame(&self) -> u64 {
+        self.frame
+    }
+
     fn now(&self) -> Instant {
         self.now.unwrap_or_else(Instant::now)
     }

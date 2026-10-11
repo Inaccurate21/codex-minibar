@@ -1,11 +1,18 @@
 //! Appearance: theme, accent, font, icons, time format, popup material and motion.
 
-use std::{sync::Arc, time::Duration};
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashMap,
+    rc::Rc,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use gpui::{
     AnyElement, App, AppContext, Context, Entity, Focusable, FontWeight, InteractiveElement,
-    IntoElement, KeyDownEvent, ParentElement, SharedString, StatefulInteractiveElement, Styled,
-    Subscription, Task, Window, div, prelude::FluentBuilder, px, relative,
+    IntoElement, KeyDownEvent, ParentElement, Pixels, ScrollHandle, SharedString,
+    StatefulInteractiveElement, Styled, Subscription, Task, Window, canvas, div,
+    prelude::FluentBuilder, px, relative,
 };
 
 use super::input::{InputEvent, TextInput};
@@ -24,6 +31,10 @@ use crate::vscode_themes::VsCodeTheme;
 
 /// Popup theme cards per row.
 const THEME_COLUMNS: u16 = 3;
+const THEME_GAP: f32 = 12.0;
+/// How long after first showing up a VS Code theme card may play its
+/// entrance; one scrolled into view later just shows.
+const THEME_APPEAR_WINDOW: Duration = Duration::from_millis(400);
 
 const FONT_PICKER: &str = "appearance-font";
 const FONT_PICKER_WIDTH: f32 = 220.0;
@@ -60,6 +71,90 @@ impl FontPicker {
     pub(super) fn cancel_preview(&mut self) {
         self.hovered = None;
         self.preview_task = None;
+    }
+}
+
+/// What the popup theme grid knows from the frames before this one.
+#[derive(Default)]
+pub(super) struct ThemeGridMetrics {
+    /// Grid top in page-content coordinates (independent of scrolling).
+    top: Cell<Option<f32>>,
+    /// Measured height of each row, `None` until it has been laid out.
+    rows: RefCell<Vec<Option<f32>>>,
+    /// `Fx` frame the grid last rendered in.
+    frame: Cell<Option<u64>>,
+    /// When each VS Code theme first showed up in the grid.
+    appeared: RefCell<HashMap<String, Instant>>,
+}
+
+impl ThemeGridMetrics {
+    fn begin_frame(&self, frame: u64, row_count: usize, installed: &[Arc<VsCodeTheme>]) {
+        let mounted = self
+            .frame
+            .replace(Some(frame))
+            .is_some_and(|last| last.wrapping_add(1) == frame);
+        let now = Instant::now();
+        let mut appeared = self.appeared.borrow_mut();
+        if !mounted {
+            // The page was just opened: positions from an earlier visit are
+            // stale, and every card fades in as the page appears.
+            self.top.set(None);
+            self.rows.borrow_mut().clear();
+            appeared.clear();
+        }
+        appeared.retain(|id, _| installed.iter().any(|theme| &theme.id == id));
+        for theme in installed {
+            appeared.entry(theme.id.clone()).or_insert(now);
+        }
+        self.rows.borrow_mut().resize(row_count, None);
+    }
+
+    fn row_height(&self, row: usize) -> Option<f32> {
+        self.rows.borrow().get(row).copied().flatten()
+    }
+
+    fn set_row_height(&self, row: usize, height: Pixels) {
+        if let Some(slot) = self.rows.borrow_mut().get_mut(row) {
+            *slot = Some(f32::from(height));
+        }
+    }
+
+    /// Whether a card should still play its entrance.
+    fn appearing(&self, id: &str) -> bool {
+        self.appeared
+            .borrow()
+            .get(id)
+            .is_none_or(|at| at.elapsed() < THEME_APPEAR_WINDOW)
+    }
+
+    /// Rows to build this frame: those within a viewport's height of the
+    /// visible part of the page, plus any not measured yet.
+    fn visible_rows(&self, row_count: usize, scroll: Option<&ScrollHandle>) -> Vec<bool> {
+        let viewport = scroll.map(ScrollHandle::bounds);
+        let (Some(top), Some(scroll), Some(viewport)) = (self.top.get(), scroll, viewport) else {
+            return vec![true; row_count];
+        };
+        let view_height = f32::from(viewport.size.height);
+        if view_height <= 0.0 {
+            return vec![true; row_count];
+        }
+        // A viewport of slack covers the glide and the one-frame lag of
+        // the measurements.
+        let view_top = f32::from(viewport.origin.y) - view_height;
+        let view_bottom = f32::from(viewport.origin.y) + view_height * 2.0;
+        let rows = self.rows.borrow();
+        let mut y = top + f32::from(scroll.offset().y);
+        let mut estimate = 0.0;
+        (0..row_count)
+            .map(|row| {
+                let measured = rows.get(row).copied().flatten();
+                let height = measured.unwrap_or(estimate);
+                estimate = height;
+                let shown = measured.is_none() || (y < view_bottom && y + height > view_top);
+                y += height + THEME_GAP;
+                shown
+            })
+            .collect()
     }
 }
 
@@ -263,25 +358,84 @@ pub(super) trait ThemePicker: ThemeHost {
         .into_any_element()
     }
 
-    /// Built-in designs followed by every installed VS Code theme, in a grid
-    /// of equal columns.
+    /// Built-in designs followed by every installed VS Code theme, in rows
+    /// of equal columns. Rows well outside the page viewport render as
+    /// spacers of their measured height: with many themes installed, every
+    /// card rebuilt each frame of a scroll glide or hover fade stalls it.
     fn popup_theme_grid(&self, k: &Kit, cx: &mut Context<Self>) -> AnyElement {
         let installed = crate::vscode_themes::installed();
-        let choices = PopupTheme::ALL
+        let mut choices = PopupTheme::ALL
             .into_iter()
             .map(ThemeChoice::Builtin)
             .chain(installed.iter().cloned().map(ThemeChoice::VsCode));
+        let count = PopupTheme::ALL.len() + installed.len();
+        let row_count = count.div_ceil(usize::from(THEME_COLUMNS));
+        let metrics = Rc::clone(&self.theme_browser().grid);
+        let scroll = k.page_scroll.clone();
+        metrics.begin_frame(k.fx.frame(), row_count, &installed);
+        let visible = metrics.visible_rows(row_count, scroll.as_ref());
         // Once per frame, not per card: see `vscode_palette`.
         let accent = crate::theme::accent_ramp(self.settings().accent_color);
-        let cards = choices
-            .map(|choice| self.popup_theme_card(k, choice, accent, cx))
-            .collect::<Vec<_>>();
+        let mut rows = Vec::with_capacity(row_count);
+        for (row, shown) in visible.into_iter().enumerate() {
+            let members = choices
+                .by_ref()
+                .take(usize::from(THEME_COLUMNS))
+                .collect::<Vec<_>>();
+            let height = metrics.row_height(row);
+            if !shown && let Some(height) = height {
+                rows.push(div().w_full().h(px(height)).into_any_element());
+                continue;
+            }
+            let cards = members
+                .into_iter()
+                .map(|choice| self.popup_theme_card(k, choice, accent, &metrics, cx))
+                .collect::<Vec<_>>();
+            let measure = Rc::clone(&metrics);
+            rows.push(
+                div()
+                    .relative()
+                    .w_full()
+                    .child(
+                        div()
+                            .grid()
+                            .grid_cols(THEME_COLUMNS)
+                            .gap(px(THEME_GAP))
+                            .w_full()
+                            .children(cards),
+                    )
+                    .child(
+                        canvas(
+                            move |bounds, _, _| measure.set_row_height(row, bounds.size.height),
+                            |_, _, _, _| {},
+                        )
+                        .absolute()
+                        .inset_0(),
+                    )
+                    .into_any_element(),
+            );
+        }
+        let measure = Rc::clone(&metrics);
         div()
-            .grid()
-            .grid_cols(THEME_COLUMNS)
-            .gap(px(12.0))
+            .relative()
+            .flex()
+            .flex_col()
+            .gap(px(THEME_GAP))
             .w_full()
-            .children(cards)
+            .children(rows)
+            .child(
+                canvas(
+                    move |bounds, _, _| {
+                        // Content coordinates stay put while the page scrolls.
+                        measure.top.set(scroll.as_ref().map(|scroll| {
+                            f32::from(bounds.origin.y) - f32::from(scroll.offset().y)
+                        }));
+                    },
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .inset_0(),
+            )
             .into_any_element()
     }
 
@@ -293,6 +447,7 @@ pub(super) trait ThemePicker: ThemeHost {
         k: &Kit,
         choice: ThemeChoice,
         accent: crate::theme::AccentRamp,
+        metrics: &ThemeGridMetrics,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let theme = &k.theme;
@@ -413,9 +568,17 @@ pub(super) trait ThemePicker: ThemeHost {
         .child(preview)
         .child(title)
         .into_any_element();
-        // Newly installed themes fade in rather than popping into the grid.
+        // Newly installed themes fade in rather than popping into the grid;
+        // cards scrolled back into view later just show. Both wrappers
+        // share one id so the card keeps its element state.
         match &vscode {
-            Some(_) => kit::appear(k, card_id, card),
+            Some(vscode) if metrics.appearing(&vscode.id) => kit::appear(k, card_id, card),
+            Some(_) => div()
+                .id(eid(card_id))
+                .relative()
+                .w_full()
+                .child(card)
+                .into_any_element(),
             None => card,
         }
     }
