@@ -406,6 +406,10 @@ home-card-layout-rings = { "" }
 home-card-layout-tiles = { "" }
 
 # English source:
+# home-card-layout-classic = Classic
+home-card-layout-classic = { "" }
+
+# English source:
 # drag-to-reorder = Drag to reorder
 drag-to-reorder = { "" }
 
@@ -1180,16 +1184,16 @@ popup-corner-radius = { "" }
 popup-borders = { "" }
 
 # English source:
-# popup-borders-description = Outline cards and controls
+# popup-borders-description = Choose which parts of the popup are outlined
 popup-borders-description = { "" }
+
+# English source:
+# popup-card-borders = Cards and controls
+popup-card-borders = { "" }
 
 # English source:
 # popup-window-border = Window border
 popup-window-border = { "" }
-
-# English source:
-# popup-window-border-description = Outline the edge of the popup window
-popup-window-border-description = { "" }
 
 # English source:
 # popup-theme-contrast = Contrast
@@ -1302,14 +1306,6 @@ show-usage-pace = { "" }
 # English source:
 # marks-whether-you-re-burning-quota-faster-or-slower-than-an-even = Marks whether you're burning quota faster or slower than an even pace.
 marks-whether-you-re-burning-quota-faster-or-slower-than-an-even = { "" }
-
-# English source:
-# use-legacy-usage-cards = Use legacy usage cards
-use-legacy-usage-cards = { "" }
-
-# English source:
-# show-the-older-layout-with-a-header-a-thin-bar-and-a-footer = Show the older layout with a header, a thin bar and a footer.
-show-the-older-layout-with-a-header-a-thin-bar-and-a-footer = { "" }
 
 # English source:
 # show-account-name = Show account name

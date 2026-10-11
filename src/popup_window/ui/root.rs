@@ -2298,7 +2298,7 @@ impl PopupRoot {
             show_used_percentage: self.ui.show_used_percentage,
             show_usage_values: self.ui.show_usage_values,
             show_usage_pace: self.ui.show_usage_pace,
-            compact: self.ui.compact_usage_cards,
+            compact: true,
         }
     }
 

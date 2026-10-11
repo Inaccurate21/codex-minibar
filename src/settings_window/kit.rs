@@ -1942,7 +1942,11 @@ pub(crate) fn dropdown_with_placeholder(
         .max(width)
         .max(160.0);
     let mut wrapper = div().relative().flex_none().child(button).child(measure);
-    if width <= 0.0 {
+    // The wrapper is what gets measured, so a fixed-width dropdown must not
+    // stretch with its parent (e.g. a column `field`) or its list would too.
+    if width > 0.0 {
+        wrapper = wrapper.w(px(width));
+    } else {
         wrapper = wrapper.w_full().flex_1();
     }
     if (open && !disabled) || leaving.is_some() {

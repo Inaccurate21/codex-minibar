@@ -63,9 +63,8 @@ const BODY_MAX_LINES: usize = 4;
 const BUTTON_HEIGHT: f32 = 28.0;
 /// Space above the buttons and above the quota section.
 const SECTION_GAP: f32 = 12.0;
-/// Popup limit cards: the regular one and the compact single row.
-const LIMIT_CARD: f32 = 82.0;
-const COMPACT_LIMIT_CARD: f32 = 44.0;
+/// Popup limit card: the compact single row.
+const LIMIT_CARD: f32 = 44.0;
 const ENTER: Duration = Duration::from_millis(360);
 const EXIT: Duration = Duration::from_millis(220);
 const TICK: Duration = Duration::from_millis(100);
@@ -106,7 +105,6 @@ struct DisplayPrefs {
     /// Percentages show the used share instead of what is left.
     used: bool,
     colored_icons: bool,
-    compact: bool,
 }
 
 pub(crate) struct ToastHost {
@@ -262,25 +260,17 @@ impl ToastHost {
             .map(|root| DisplayPrefs {
                 used: root.ui.show_used_percentage,
                 colored_icons: root.ui.use_colored_provider_icons,
-                compact: root.ui.compact_usage_cards,
             })
             .unwrap_or(DisplayPrefs {
                 used: false,
                 colored_icons: true,
-                compact: true,
             })
     }
 
     /// Card height for `notification`, from the same metrics the card is
     /// laid out with. Cards have a fixed height so the stack can glide
     /// without waiting for layout.
-    fn measure(
-        &self,
-        notification: &Notification,
-        window: &Window,
-        palette: &Palette,
-        prefs: DisplayPrefs,
-    ) -> f32 {
+    fn measure(&self, notification: &Notification, window: &Window, palette: &Palette) -> f32 {
         let mut height = BORDER * 2.0 + PADDING * 2.0 + LINE;
         let alert = notification.limits.as_deref();
         if alert.is_none() && !notification.body.trim().is_empty() {
@@ -293,13 +283,8 @@ impl ToastHost {
             height += SECTION_GAP + BUTTON_HEIGHT;
         }
         if let Some(alert) = alert {
-            let card = if prefs.compact {
-                COMPACT_LIMIT_CARD
-            } else {
-                LIMIT_CARD
-            };
             let rows = quota_rows(alert).len() as f32;
-            height += SECTION_GAP + LINE + rows * (palette.card_gap + card);
+            height += SECTION_GAP + LINE + rows * (palette.card_gap + LIMIT_CARD);
         }
         height
     }
@@ -314,7 +299,7 @@ impl ToastHost {
     ) -> bool {
         crate::notifications::play_sound(&notification);
         let palette = self.palette(window, cx);
-        let height = self.measure(&notification, window, &palette, self.prefs(cx));
+        let height = self.measure(&notification, window, &palette);
         let now = Instant::now();
         // Identical notifications (e.g. a burst of the same error) replace
         // the visible one instead of piling up.
@@ -869,44 +854,26 @@ fn limit_card(
     let title = nowrap(caption(title, palette.text_secondary));
     let ticks = interval_tick_count(window);
 
-    if prefs.compact {
-        let mut card = components::card(palette)
-            .relative()
-            .overflow_hidden()
-            .h(px(COMPACT_LIMIT_CARD));
-        for layer in components::compact_progress_layers(value, None, ticks, color, palette) {
-            card = card.child(layer);
-        }
-        return card.child(
-            div()
-                .relative()
-                .size_full()
-                .px(px(12.0))
-                .flex()
-                .flex_row()
-                .items_center()
-                .gap(px(10.0))
-                .child(div().flex_1().min_w_0().child(title))
-                .child(usage)
-                .children(reset),
-        );
-    }
-    components::card(palette)
+    let mut card = components::card(palette)
+        .relative()
         .overflow_hidden()
-        .h(px(LIMIT_CARD))
-        .px(px(12.0))
-        .flex()
-        .flex_col()
-        .justify_center()
-        .gap(px(8.0))
-        .child(title)
-        .child(components::progress_track(
-            value, None, ticks, color, palette,
-        ))
-        .child(match reset {
-            Some(reset) => components::split_row(usage, reset),
-            None => div().child(usage),
-        })
+        .h(px(LIMIT_CARD));
+    for layer in components::compact_progress_layers(value, None, ticks, color, palette) {
+        card = card.child(layer);
+    }
+    card.child(
+        div()
+            .relative()
+            .size_full()
+            .px(px(12.0))
+            .flex()
+            .flex_row()
+            .items_center()
+            .gap(px(10.0))
+            .child(div().flex_1().min_w_0().child(title))
+            .child(usage)
+            .children(reset),
+    )
 }
 
 /// Union of rounded card rectangles as the host's visible and clickable area.

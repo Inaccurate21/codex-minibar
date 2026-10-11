@@ -109,9 +109,21 @@ impl PopupRoot {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
+        let style = self.card_style();
+        self.render_cards_styled(cards, surface, style, window, cx)
+    }
+
+    fn render_cards_styled(
+        &mut self,
+        cards: &[Card<'_>],
+        surface: PopupSurface,
+        style: CardStyle,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
         cards
             .iter()
-            .map(|card| self.render_card(card, surface, window, cx))
+            .map(|card| self.render_card(card, surface, style, window, cx))
             .collect()
     }
 
@@ -119,10 +131,10 @@ impl PopupRoot {
         &mut self,
         card_spec: &Card<'_>,
         surface: PopupSurface,
+        style: CardStyle,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let style = self.card_style();
         match card_spec {
             Card::Heading(heading) => self.render_heading(heading, surface, cx),
             Card::Limit {
@@ -256,7 +268,7 @@ impl PopupRoot {
                 .flex()
                 .flex_col()
                 .gap(px(6.0))
-                .children(self.render_cards(cards, surface, window, cx))
+                .children(self.render_cards_styled(cards, surface, style, window, cx))
                 .into_any_element(),
         }
     }
@@ -270,10 +282,15 @@ impl PopupRoot {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
-        if layout == HomeCardLayout::Cards {
-            return self.render_cards(cards, PopupSurface::HomeTab, window, cx);
-        }
         let style = self.card_style();
+        if matches!(layout, HomeCardLayout::Cards | HomeCardLayout::Classic) {
+            // Classic keeps the older header, thin bar and footer cards.
+            let style = CardStyle {
+                compact: layout == HomeCardLayout::Cards,
+                ..style
+            };
+            return self.render_cards_styled(cards, PopupSurface::HomeTab, style, window, cx);
+        }
         let paired = self.card_inner_width(PopupSurface::HomeTab) >= RING_PAIR_MIN_WIDTH;
         let mut out = Vec::new();
         let mut rings = Vec::new();
@@ -319,7 +336,13 @@ impl PopupRoot {
                 }
                 _ => {
                     flush_rings(&mut out, &mut rings, paired);
-                    out.push(self.render_card(card_spec, PopupSurface::HomeTab, window, cx));
+                    out.push(self.render_card(
+                        card_spec,
+                        PopupSurface::HomeTab,
+                        style,
+                        window,
+                        cx,
+                    ));
                 }
             }
         }

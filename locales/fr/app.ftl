@@ -294,6 +294,7 @@ home-card-layout-cards = Cartes
 home-card-layout-lines = Lignes
 home-card-layout-rings = Anneaux
 home-card-layout-tiles = Tuiles
+home-card-layout-classic = Classique
 drag-to-reorder = Faites glisser pour réorganiser
 
 # src/popup_window/ui/home.rs
@@ -810,9 +811,9 @@ compact = Compacte
 # src/settings_window/appearance.rs
 popup-corner-radius = Rayon du coin contextuel
 popup-borders = Bordures
-popup-borders-description = Afficher les contours des cartes et des contrôles
+popup-borders-description = Choisir les éléments de la popup à entourer d'un contour
+popup-card-borders = Cartes et contrôles
 popup-window-border = Bordure de la fenêtre
-popup-window-border-description = Souligner le bord de la fenêtre popup
 popup-theme-contrast = Contraste
 popup-theme-contrast-description = Faire ressortir plus ou moins le texte et les contours des thèmes VS Code
 popup-theme-tint = Teinte
@@ -885,12 +886,6 @@ show-usage-pace = Afficher le rythme d'utilisation
 
 # src/settings_window/onboarding.rs
 marks-whether-you-re-burning-quota-faster-or-slower-than-an-even = Indique si vous brûlez votre quota plus rapidement ou plus lentement qu'un rythme régulier.
-
-# src/settings_window/customize.rs
-use-legacy-usage-cards = Utiliser les anciennes cartes d'utilisation
-
-# src/settings_window/customize.rs
-show-the-older-layout-with-a-header-a-thin-bar-and-a-footer = Affichez l'ancienne mise en page avec un en-tête, une barre fine et un pied de page.
 
 # src/settings_window/onboarding.rs
 show-account-name = Afficher le nom du compte

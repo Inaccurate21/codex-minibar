@@ -293,6 +293,7 @@ home-card-layout-cards = Karten
 home-card-layout-lines = Linien
 home-card-layout-rings = Ringe
 home-card-layout-tiles = Kacheln
+home-card-layout-classic = Klassisch
 drag-to-reorder = Zum Neuanordnen ziehen
 
 # src/popup_window/ui/home.rs
@@ -809,9 +810,9 @@ compact = Kompakt
 # src/settings_window/appearance.rs
 popup-corner-radius = Popup-Eckenradius
 popup-borders = Rahmen
-popup-borders-description = Rahmen um Karten und Steuerelemente anzeigen
+popup-borders-description = Festlegen, welche Teile des Popups umrandet werden
+popup-card-borders = Karten und Steuerelemente
 popup-window-border = Fensterrahmen
-popup-window-border-description = Rand des Popup-Fensters umranden
 popup-theme-contrast = Kontrast
 popup-theme-contrast-description = Text und Umrisse von VS Code-Designs stärker oder schwächer hervorheben
 popup-theme-tint = Tönung
@@ -884,12 +885,6 @@ show-usage-pace = Nutzungstempo anzeigen
 
 # src/settings_window/onboarding.rs
 marks-whether-you-re-burning-quota-faster-or-slower-than-an-even = Markiert, ob Sie Ihr Kontingent schneller oder langsamer als bei einem gleichmäßigen Tempo verbrennen.
-
-# src/settings_window/customize.rs
-use-legacy-usage-cards = Verwenden Sie ältere Nutzungskarten
-
-# src/settings_window/customize.rs
-show-the-older-layout-with-a-header-a-thin-bar-and-a-footer = Zeigen Sie das ältere Layout mit einer Kopfzeile, einer dünnen Leiste und einer Fußzeile an.
 
 # src/settings_window/onboarding.rs
 show-account-name = Kontonamen anzeigen

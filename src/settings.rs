@@ -10,7 +10,7 @@ use chrono::{DateTime, Local, Timelike};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 
-pub const SETTINGS_VERSION: u32 = 39;
+pub const SETTINGS_VERSION: u32 = 40;
 
 mod migration;
 
@@ -1437,7 +1437,7 @@ impl TotalSpendPresentation {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HomeCardLayout {
-    /// The ordinary quota cards (compact or legacy, per `compact_usage_cards`).
+    /// The ordinary compact quota cards with the progress filling the card.
     #[default]
     Cards,
     /// One line per window with a thin bar along the card's bottom edge.
@@ -1446,10 +1446,18 @@ pub enum HomeCardLayout {
     Rings,
     /// Compact tiles, two per row, with the progress filling the background.
     Tiles,
+    /// The older cards with a header, a thin bar and a footer.
+    Classic,
 }
 
 impl HomeCardLayout {
-    pub const ALL: [Self; 4] = [Self::Cards, Self::Lines, Self::Rings, Self::Tiles];
+    pub const ALL: [Self; 5] = [
+        Self::Cards,
+        Self::Lines,
+        Self::Rings,
+        Self::Tiles,
+        Self::Classic,
+    ];
 }
 
 /// Time range for the Usage Stats card on the popup Home tab.
@@ -1806,9 +1814,6 @@ pub struct Settings {
     #[serde(default = "default_show_usage_values")]
     pub show_usage_values: bool,
     pub show_usage_pace: bool,
-    /// Uses the compact full-card progress layout for popup quota cards (the
-    /// default). False selects the legacy header, bar, and footer layout.
-    pub compact_usage_cards: bool,
     /// Per-card visibility for popup Home and provider tabs.
     pub popup_visibility: PopupVisibility,
     /// Shows the Usage Stats widget on the popup's Home tab.
@@ -1874,7 +1879,6 @@ impl Default for Settings {
             show_used_percentage: false,
             show_usage_values: true,
             show_usage_pace: true,
-            compact_usage_cards: true,
             popup_visibility: PopupVisibility::build_defaults(),
             show_total_spend_on_all_tab: true,
             total_spend_presentation: TotalSpendPresentation::default(),
@@ -3377,6 +3381,38 @@ fn migrate(document: &mut toml::Value, mut version: u32) -> Result<()> {
                 migration::migrate_to_instances(document)?;
                 version = migration::INSTANCES_VERSION;
             }
+            39 => {
+                // The global legacy-cards switch became the Classic layout of
+                // each Home provider widget that still used ordinary cards.
+                let root = document
+                    .as_table_mut()
+                    .context("settings root must be a TOML table")?;
+                let legacy_cards = root
+                    .remove("compact_usage_cards")
+                    .and_then(|value| value.as_bool())
+                    == Some(false);
+                if legacy_cards {
+                    let ids = root
+                        .get("instances")
+                        .and_then(toml::Value::as_array)
+                        .into_iter()
+                        .flatten()
+                        .filter_map(|instance| instance.get("id")?.as_str().map(str::to_owned))
+                        .collect::<Vec<_>>();
+                    let layouts = root
+                        .entry("popup_home_card_layouts")
+                        .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
+                    if let Some(layouts) = layouts.as_table_mut() {
+                        for id in ids {
+                            layouts
+                                .entry(id)
+                                .or_insert_with(|| toml::Value::String("classic".into()));
+                        }
+                    }
+                }
+                root.insert("version".into(), toml::Value::Integer(40));
+                version = 40;
+            }
             // Unknown future/gap versions: stamp current and keep decoding with
             // serde defaults rather than refusing to start.
             _ => {
@@ -3535,6 +3571,31 @@ mod tests {
     }
 
     #[test]
+    fn migrates_legacy_usage_cards_to_the_classic_home_layout() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("settings.toml");
+        fs::write(
+            &path,
+            "version = 38\ncompact_usage_cards = false\n\n[popup_home_card_layouts]\ncodex = \"rings\"\n",
+        )
+        .unwrap();
+
+        let loaded = Settings::load_or_create(&path).unwrap();
+
+        assert_eq!(loaded.version, SETTINGS_VERSION);
+        let layout = |kind: ProviderKind| loaded.popup_home_card_layouts.get(kind.id()).copied();
+        // A layout chosen before keeps winning over the old switch.
+        assert_eq!(layout(ProviderKind::Codex), Some(HomeCardLayout::Rings));
+        assert_eq!(layout(ProviderKind::Claude), Some(HomeCardLayout::Classic));
+        assert!(!fs::read_to_string(path).unwrap().contains("compact_usage_cards"));
+
+        let compact = directory.path().join("compact.toml");
+        fs::write(&compact, "version = 39\ncompact_usage_cards = true\n").unwrap();
+        let loaded = Settings::load_or_create(&compact).unwrap();
+        assert!(loaded.popup_home_card_layouts.is_empty());
+    }
+
+    #[test]
     fn migrates_v35_settings_with_usage_and_forced_reset_defaults() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("settings.toml");
@@ -3674,7 +3735,6 @@ show_usage_stats = false
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("settings.toml");
         let expected = Settings {
-            compact_usage_cards: false,
             bottom_bar_size: BottomBarSize::Compact,
             popup_corner_radius: PopupCornerRadius::Large,
             popup_background_material: PopupBackgroundMaterial::Solid,
@@ -3730,7 +3790,6 @@ tray_widgets = []
         );
         assert!(migrated.start_at_login);
         assert!(migrated.show_usage_pace);
-        assert!(migrated.compact_usage_cards);
         assert!(
             migrated
                 .popup_visibility
