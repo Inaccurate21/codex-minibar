@@ -2586,3 +2586,24 @@ reset-rate-limited = Zu viele Anfragen zur Zurücksetzung. Später erneut versuc
 reset-sign-in-again = Erneut bei Claude anmelden, um Zurücksetzungen zu nutzen.
 reset-cli-login-required = Zum Zurücksetzen die Claude-CLI-Anmeldung desselben Kontos verwenden.
 reset-invalid-grant = Claude hat eine ungültige Zurücksetzung zurückgegeben.
+
+# src/updater.rs
+update-downloading = Update wird heruntergeladen
+
+# src/updater.rs
+update-download-progress = { $downloaded } von { $total }
+
+# src/updater.rs
+update-downloaded = { $downloaded } heruntergeladen
+
+# src/updater.rs
+update-installing = Update wird installiert
+
+# src/updater.rs
+update-unpacking = Dateien werden entpackt…
+
+# src/updater.rs
+update-restarting = Codex Minibar wird neu gestartet
+
+# src/updater.rs
+update-restarting-body = Die App öffnet sich gleich wieder.

@@ -895,13 +895,8 @@ pub(super) fn pump_tray_and_dismiss(
     for action in tray.drain_menu_actions() {
         match action {
             TrayMenuAction::Update => {
-                if let Err(error) = crate::updater::apply_pending_update() {
-                    eprintln!("failed to apply update: {error:#}");
-                    notifications::show_error(
-                        crate::i18n::tr("update-failed"),
-                        &format!("{error:#}"),
-                    );
-                }
+                // Failures are reported on the update card.
+                let _ = crate::updater::apply_pending_update();
             }
             TrayMenuAction::Settings => {
                 flush_popup_ui(ui);

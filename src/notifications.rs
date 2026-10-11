@@ -73,10 +73,8 @@ impl NotificationAction {
         let action = self.clone();
         std::thread::spawn(move || match action {
             NotificationAction::InstallUpdate => {
-                if let Err(error) = crate::updater::apply_pending_update() {
-                    eprintln!("failed to apply update: {error:#}");
-                    show_error(crate::i18n::tr("update-failed"), &format!("{error:#}"));
-                }
+                // Failures are reported on the update card.
+                let _ = crate::updater::apply_pending_update();
             }
             NotificationAction::OpenUrl(url) => {
                 if let Err(error) = crate::updater::open_url(&url) {
@@ -105,6 +103,18 @@ pub struct LimitAlert {
     pub focus: LimitFocus,
 }
 
+/// A progress bar under the text of a long-running operation's card.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Progress {
+    /// Share done, `0.0..=1.0`.
+    Fraction(f32),
+    /// The total is unknown; the bar sweeps.
+    Indeterminate,
+}
+
+/// Key of the card that follows an update from download to restart.
+pub const UPDATE_PROGRESS_KEY: &str = "update-progress";
+
 #[derive(Clone, Debug)]
 pub struct Notification {
     pub kind: NotificationKind,
@@ -113,6 +123,12 @@ pub struct Notification {
     /// `(label, action)`; the first one is the primary button.
     pub actions: Vec<(String, NotificationAction)>,
     pub limits: Option<Box<LimitAlert>>,
+    /// A visible card with the same key is updated in place instead of a new
+    /// card entering, so one operation reads as one card.
+    pub key: Option<&'static str>,
+    /// Cards with progress stay until a notification without progress
+    /// replaces them (or they are closed by hand).
+    pub progress: Option<Progress>,
 }
 
 impl Notification {
@@ -123,7 +139,19 @@ impl Notification {
             body: body.to_owned(),
             actions: Vec::new(),
             limits: None,
+            key: None,
+            progress: None,
         }
+    }
+
+    pub fn keyed(mut self, key: &'static str) -> Self {
+        self.key = Some(key);
+        self
+    }
+
+    pub fn with_progress(mut self, progress: Progress) -> Self {
+        self.progress = Some(progress);
+        self
     }
 
     /// A notification about one quota window of `provider`. The body names
@@ -189,10 +217,13 @@ pub fn initialize() {
 
 /// Posts a notification to the toast host. Safe from any thread.
 pub fn notify(notification: Notification) {
-    crate::logger::info(format!(
-        "Notification shown: {} — {}",
-        notification.title, notification.body
-    ));
+    // Progress ticks arrive many times a second; only results are logged.
+    if notification.progress.is_none() {
+        crate::logger::info(format!(
+            "Notification shown: {} — {}",
+            notification.title, notification.body
+        ));
+    }
     crate::popup_window::send_command(crate::popup_window::PopupCommand::Toast(Box::new(
         notification,
     )));
@@ -215,6 +246,27 @@ pub fn show_error(title: &str, body: &str) {
 /// A discovered app update with install and release-notes buttons.
 pub fn show_update_available(version: &str, release_url: &str) {
     notify(update_available(version, release_url));
+}
+
+/// Moves the update card to the next step, creating it on the first one.
+pub fn show_update_progress(title: &str, body: &str, progress: Progress) {
+    notify(
+        Notification::new(NotificationKind::Update, title, body)
+            .keyed(UPDATE_PROGRESS_KEY)
+            .with_progress(progress),
+    );
+}
+
+/// Turns the update card into the final error.
+pub fn show_update_failed(error: &anyhow::Error) {
+    notify(
+        Notification::new(
+            NotificationKind::Error,
+            crate::i18n::tr("update-failed"),
+            &format!("{error:#}"),
+        )
+        .keyed(UPDATE_PROGRESS_KEY),
+    );
 }
 
 fn update_available(version: &str, release_url: &str) -> Notification {

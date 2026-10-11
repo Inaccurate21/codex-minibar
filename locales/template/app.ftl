@@ -3684,3 +3684,31 @@ reset-cli-login-required = { "" }
 # English source:
 # reset-invalid-grant = Claude returned an invalid reset credit.
 reset-invalid-grant = { "" }
+
+# English source:
+# update-downloading = Downloading update
+update-downloading = { "" }
+
+# English source:
+# update-download-progress = { $downloaded } of { $total }
+update-download-progress = { "" }
+
+# English source:
+# update-downloaded = { $downloaded } downloaded
+update-downloaded = { "" }
+
+# English source:
+# update-installing = Installing update
+update-installing = { "" }
+
+# English source:
+# update-unpacking = Unpacking files…
+update-unpacking = { "" }
+
+# English source:
+# update-restarting = Restarting Codex Minibar
+update-restarting = { "" }
+
+# English source:
+# update-restarting-body = The app will reopen in a moment.
+update-restarting-body = { "" }

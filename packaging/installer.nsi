@@ -166,6 +166,22 @@ Section "Install"
   Delete "$INSTDIR\WinUIEdit.dll"
   Delete "$INSTDIR\wuceffectsi.dll"
   RMDir /r "$INSTDIR\Microsoft.UI.Xaml"
+  ; Per-locale folders (en-us, ru-RU, ...) of that runtime. RMDir without /r
+  ; only removes a folder once nothing else is left in it.
+  FindFirst $0 $1 "$INSTDIR\*.*"
+  ${DoWhile} $1 != ""
+    ${If} $1 != "."
+    ${AndIf} $1 != ".."
+      Delete "$INSTDIR\$1\Microsoft.ui.xaml.dll.mui"
+      Delete "$INSTDIR\$1\Microsoft.UI.Xaml.Phone.dll.mui"
+      RMDir "$INSTDIR\$1"
+    ${EndIf}
+    FindNext $0 $1
+  ${Loop}
+  FindClose $0
+  ; Assets dropped by later releases and staging left by zip updates.
+  RMDir /r "$INSTDIR\assets"
+  RMDir /r "$INSTDIR\.update-staging"
   File /r "{{SOURCE_DIR}}\*.*"
 
   CreateDirectory "$SMPROGRAMS\{{PRODUCT_NAME}}"

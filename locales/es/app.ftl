@@ -1696,3 +1696,24 @@ reset-rate-limited = Demasiadas solicitudes de reinicio. Inténtalo más tarde.
 reset-sign-in-again = Vuelve a iniciar sesión en Claude para usar reinicios.
 reset-cli-login-required = Usa el inicio de sesión de Claude CLI de la misma cuenta para aplicar reinicios.
 reset-invalid-grant = Claude devolvió un reinicio inválido.
+
+# src/updater.rs
+update-downloading = Descargando actualización
+
+# src/updater.rs
+update-download-progress = { $downloaded } de { $total }
+
+# src/updater.rs
+update-downloaded = { $downloaded } descargados
+
+# src/updater.rs
+update-installing = Instalando actualización
+
+# src/updater.rs
+update-unpacking = Descomprimiendo archivos…
+
+# src/updater.rs
+update-restarting = Reiniciando Codex Minibar
+
+# src/updater.rs
+update-restarting-body = La aplicación se volverá a abrir en un momento.

@@ -37,6 +37,12 @@ fn run() -> Result<()> {
         eprintln!("failed to apply startup registration: {error:#}");
     }
     std::thread::spawn(|| {
+        // Let the update helper that relaunched us finish and drop its own
+        // staging before the install directory is swept.
+        std::thread::sleep(std::time::Duration::from_secs(30));
+        codex_minibar::updater::cleanup_install_dir();
+    });
+    std::thread::spawn(|| {
         if let Err(error) = codex_minibar::discovery::cleanup() {
             codex_minibar::logger::info(format!(
                 "Codex CLI startup cache cleanup deferred: {error:#}"
