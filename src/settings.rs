@@ -3587,7 +3587,11 @@ mod tests {
         // A layout chosen before keeps winning over the old switch.
         assert_eq!(layout(ProviderKind::Codex), Some(HomeCardLayout::Rings));
         assert_eq!(layout(ProviderKind::Claude), Some(HomeCardLayout::Classic));
-        assert!(!fs::read_to_string(path).unwrap().contains("compact_usage_cards"));
+        assert!(
+            !fs::read_to_string(path)
+                .unwrap()
+                .contains("compact_usage_cards")
+        );
 
         let compact = directory.path().join("compact.toml");
         fs::write(&compact, "version = 39\ncompact_usage_cards = true\n").unwrap();

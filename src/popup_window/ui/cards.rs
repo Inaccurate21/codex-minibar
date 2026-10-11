@@ -336,13 +336,7 @@ impl PopupRoot {
                 }
                 _ => {
                     flush_rings(&mut out, &mut rings, paired);
-                    out.push(self.render_card(
-                        card_spec,
-                        PopupSurface::HomeTab,
-                        style,
-                        window,
-                        cx,
-                    ));
+                    out.push(self.render_card(card_spec, PopupSurface::HomeTab, style, window, cx));
                 }
             }
         }
