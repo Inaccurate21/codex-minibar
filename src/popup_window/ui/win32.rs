@@ -152,7 +152,7 @@ pub(crate) fn configure_toast(hwnd: HWND) {
     unsafe {
         SetWindowSubclass(hwnd, Some(toast_subclass_proc), SUBCLASS_ID, 0);
         let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
-        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, (ex_style | WS_EX_NOACTIVATE) as isize);
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, (ex_style | WS_EX_NOACTIVATE) as _);
     }
     restyle(hwnd);
 }
@@ -165,13 +165,13 @@ fn restyle(hwnd: HWND) {
         let style = (style
             & !(WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_SYSMENU))
             | WS_POPUP;
-        SetWindowLongPtrW(hwnd, GWL_STYLE, style as isize);
+        SetWindowLongPtrW(hwnd, GWL_STYLE, style as _);
         let ex_style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32;
         let ex_style = (ex_style & !(WS_EX_APPWINDOW | WS_EX_LAYERED))
             | WS_EX_TOOLWINDOW
             | WS_EX_TOPMOST
             | WS_EX_NOREDIRECTIONBITMAP;
-        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex_style as isize);
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex_style as _);
 
         let set_u32 = |attribute: i32, value: u32| {
             let _ = DwmSetWindowAttribute(
