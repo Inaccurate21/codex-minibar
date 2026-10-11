@@ -290,6 +290,7 @@ home-card-layout-cards = カード
 home-card-layout-lines = ライン
 home-card-layout-rings = リング
 home-card-layout-tiles = タイル
+home-card-layout-classic = クラシック
 drag-to-reorder = ドラッグして並べ替えます
 
 # src/popup_window/ui/home.rs
@@ -806,9 +807,9 @@ compact = コンパクト
 # src/settings_window/appearance.rs
 popup-corner-radius = ポップアップコーナー半径
 popup-borders = 枠線
-popup-borders-description = カードとコントロールに枠線を表示します
+popup-borders-description = ポップアップのどの部分に枠線を表示するかを選びます
+popup-card-borders = カードとコントロール
 popup-window-border = ウィンドウの枠線
-popup-window-border-description = ポップアップウィンドウの縁に枠線を表示します
 popup-theme-contrast = コントラスト
 popup-theme-contrast-description = VS Code テーマの文字と枠線の強さを調整します
 popup-theme-tint = 色合い
@@ -881,12 +882,6 @@ show-usage-pace = 使用ペースを表示する
 
 # src/settings_window/onboarding.rs
 marks-whether-you-re-burning-quota-faster-or-slower-than-an-even = 均等なペースよりも早くクォータを消費しているか、それとも遅く消費しているかをマークします。
-
-# src/settings_window/customize.rs
-use-legacy-usage-cards = 従来の使用カードを使用する
-
-# src/settings_window/customize.rs
-show-the-older-layout-with-a-header-a-thin-bar-and-a-footer = ヘッダー、細いバー、フッターを備えた古いレイアウトを表示します。
 
 # src/settings_window/onboarding.rs
 show-account-name = アカウント名を表示

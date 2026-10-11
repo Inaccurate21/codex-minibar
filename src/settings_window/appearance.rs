@@ -924,39 +924,38 @@ impl SettingsWindow {
                     )
                     .render(k),
                 {
-                    let borders_row = kit::toggle_row(
+                    // The window hairline stays independent: borderless cards
+                    // can still sit in an outlined window.
+                    let cards = border_option(
                         k,
                         "appearance-popup-borders",
-                        crate::i18n::tr("popup-borders"),
-                        Some(crate::i18n::tr("popup-borders-description").into()),
+                        crate::i18n::tr("popup-card-borders"),
                         borders,
                         Self::h(cx, |this, value: bool, _, cx| {
                             this.edit(cx, move |settings| settings.popup_borders = value)
                         }),
                     );
-                    // The window hairline stays independent: borderless cards
-                    // can still sit in an outlined window.
-                    let window_border_row = kit::toggle_row(
+                    let window_edge = border_option(
                         k,
                         "appearance-popup-window-border",
                         crate::i18n::tr("popup-window-border"),
-                        Some(crate::i18n::tr("popup-window-border-description").into()),
                         window_border,
                         Self::h(cx, |this, value: bool, _, cx| {
                             this.edit(cx, move |settings| settings.popup_window_border = value)
                         }),
                     );
-                    let divider = div()
-                        .px(px(kit::ROW_PADDING_X))
-                        .child(kit::divider(k))
-                        .into_any_element();
-                    div()
-                        .flex()
-                        .flex_col()
-                        .child(borders_row)
-                        .child(divider)
-                        .child(div().pl(px(28.0)).child(window_border_row))
-                        .into_any_element()
+                    Row::new("appearance-borders", crate::i18n::tr("popup-borders"))
+                        .description(k, crate::i18n::tr("popup-borders-description"))
+                        .detail(
+                            div()
+                                .pt(px(12.0))
+                                .flex()
+                                .gap(px(8.0))
+                                .child(cards)
+                                .child(window_edge)
+                                .into_any_element(),
+                        )
+                        .render(k)
                 },
             ]
         });
@@ -1299,4 +1298,46 @@ pub(super) fn end_font_preview(cx: &mut App) {
     if popup_theme::set_font_preview(None) {
         cx.refresh_windows();
     }
+}
+
+/// One half of the Borders row: a tinted tile with a label and its switch;
+/// the whole tile toggles.
+fn border_option(
+    k: &mut Kit,
+    id: &'static str,
+    label: impl Into<SharedString>,
+    on: bool,
+    on_toggle: kit::Handler<bool>,
+) -> AnyElement {
+    let switch = kit::toggle(k, id, on, false, Rc::clone(&on_toggle));
+    let theme = &k.theme;
+    let tile = div()
+        .id(eid(format!("{id}-tile")))
+        .flex()
+        .flex_1()
+        .min_w_0()
+        .items_center()
+        .gap(px(12.0))
+        .h(px(44.0))
+        .px(px(14.0))
+        .rounded(px(kit::CONTROL_RADIUS + 2.0))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .truncate()
+                .text_size(px(13.0))
+                .line_height(px(20.0))
+                .text_color(theme.text)
+                .child(label.into()),
+        )
+        .child(switch);
+    let (rest, hover) = (theme.control, theme.control_hover);
+    kit::hover_bg(k, tile, kit::hover_key(id), rest, hover)
+        .cursor_pointer()
+        .on_click(move |_, window, cx| {
+            cx.stop_propagation();
+            on_toggle(!on, window, cx)
+        })
+        .into_any_element()
 }

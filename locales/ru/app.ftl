@@ -288,6 +288,7 @@ home-card-layout-cards = Карточки
 home-card-layout-lines = Строки
 home-card-layout-rings = Кольца
 home-card-layout-tiles = Плитки
+home-card-layout-classic = Классика
 drag-to-reorder = Перетащите, чтобы изменить порядок
 
 # src/popup_window/ui/home.rs
@@ -826,9 +827,9 @@ compact = Компактный
 # src/settings_window/appearance.rs
 popup-corner-radius = Радиус углов всплывающего окна
 popup-borders = Границы
-popup-borders-description = Обводка карточек и элементов управления
+popup-borders-description = Выберите, какие части всплывающего окна обводить
+popup-card-borders = Карточки и элементы управления
 popup-window-border = Граница окна
-popup-window-border-description = Обводка края всплывающего окна
 popup-theme-contrast = Контраст
 popup-theme-contrast-description = Усиливает или ослабляет текст и обводки тем VS Code
 popup-theme-tint = Тонировка
@@ -901,12 +902,6 @@ show-usage-pace = Показывать темп использования
 
 # src/settings_window/onboarding.rs
 marks-whether-you-re-burning-quota-faster-or-slower-than-an-even = Показывает, расходуется ли лимит быстрее или медленнее равномерного темпа.
-
-# src/settings_window/customize.rs
-use-legacy-usage-cards = Использовать старые карточки лимитов
-
-# src/settings_window/customize.rs
-show-the-older-layout-with-a-header-a-thin-bar-and-a-footer = Показывать прежний вид с заголовком, тонкой полосой и нижней строкой.
 
 # src/settings_window/onboarding.rs
 show-account-name = Показывать имя аккаунта

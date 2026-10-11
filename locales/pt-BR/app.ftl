@@ -194,6 +194,7 @@ home-card-layout-cards = Cartões
 home-card-layout-lines = Linhas
 home-card-layout-rings = Anéis
 home-card-layout-tiles = Blocos
+home-card-layout-classic = Clássico
 drag-to-reorder = Arraste para reordenar
 
 drop-here = Solte aqui
@@ -549,9 +550,9 @@ compact = Compacto
 
 popup-corner-radius = Raio dos cantos do popup
 popup-borders = Bordas
-popup-borders-description = Contornar os cartões e os controles
+popup-borders-description = Escolher quais partes do pop-up são contornadas
+popup-card-borders = Cartões e controles
 popup-window-border = Borda da janela
-popup-window-border-description = Contornar a borda da janela pop-up
 popup-theme-contrast = Contraste
 popup-theme-contrast-description = Destacar mais ou menos o texto e os contornos dos temas do VS Code
 popup-theme-tint = Tonalidade
@@ -603,9 +604,7 @@ show-usage-pace = Mostrar ritmo de uso
 
 marks-whether-you-re-burning-quota-faster-or-slower-than-an-even = Indica se você está consumindo a cota mais rápido ou mais devagar que um ritmo uniforme.
 
-use-legacy-usage-cards = Usar cartões de uso antigos
 
-show-the-older-layout-with-a-header-a-thin-bar-and-a-footer = Mostra o layout antigo com cabeçalho, barra fina e rodapé.
 
 show-account-name = Mostrar nome da conta
 

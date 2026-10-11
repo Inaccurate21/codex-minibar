@@ -157,18 +157,6 @@ impl SettingsWindow {
                     self,
                     k,
                     cx,
-                    "customize-legacy-cards",
-                    crate::i18n::tr("use-legacy-usage-cards"),
-                    Some(crate::i18n::tr(
-                        "show-the-older-layout-with-a-header-a-thin-bar-and-a-footer",
-                    )),
-                    |s| !s.compact_usage_cards,
-                    |s, v| s.compact_usage_cards = !v,
-                ),
-                bool_row(
-                    self,
-                    k,
-                    cx,
                     "customize-account-name",
                     crate::i18n::tr("show-account-name"),
                     None,

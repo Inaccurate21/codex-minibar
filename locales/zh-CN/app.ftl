@@ -191,6 +191,7 @@ home-card-layout-cards = 卡片
 home-card-layout-lines = 行
 home-card-layout-rings = 圆环
 home-card-layout-tiles = 磁贴
+home-card-layout-classic = 经典
 drag-to-reorder = 拖动以重新排序
 
 drop-here = 拖放到此处
@@ -546,9 +547,9 @@ compact = 紧凑
 
 popup-corner-radius = 弹出窗口圆角半径
 popup-borders = 边框
-popup-borders-description = 为卡片和控件绘制轮廓
+popup-borders-description = 选择为弹出窗口的哪些部分绘制轮廓
+popup-card-borders = 卡片和控件
 popup-window-border = 窗口边框
-popup-window-border-description = 为弹出窗口边缘绘制轮廓
 popup-theme-contrast = 对比度
 popup-theme-contrast-description = 增强或减弱 VS Code 主题中文字和轮廓的对比
 popup-theme-tint = 着色
@@ -600,9 +601,7 @@ show-usage-pace = 显示用量进度
 
 marks-whether-you-re-burning-quota-faster-or-slower-than-an-even = 标记额度消耗速度是否快于或慢于均匀进度。
 
-use-legacy-usage-cards = 使用旧版用量卡片
 
-show-the-older-layout-with-a-header-a-thin-bar-and-a-footer = 显示带标题、细进度条和页脚的旧版布局。
 
 show-account-name = 显示账户名称
 

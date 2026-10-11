@@ -340,7 +340,6 @@ pub(crate) struct UiState {
     pub(super) show_used_percentage: bool,
     pub(super) show_usage_values: bool,
     pub(super) show_usage_pace: bool,
-    pub(super) compact_usage_cards: bool,
     pub(super) popup_visibility: PopupVisibility,
     pub(super) usage_stats_enabled: bool,
     /// Instances whose usage statistics are collected and shown.
@@ -392,7 +391,6 @@ impl Default for UiState {
             show_used_percentage: false,
             show_usage_values: true,
             show_usage_pace: true,
-            compact_usage_cards: true,
             popup_visibility: PopupVisibility::build_defaults(),
             usage_stats_enabled: true,
             usage_stats_providers: Vec::new(),
@@ -451,7 +449,6 @@ impl UiState {
         self.show_used_percentage = settings.show_used_percentage;
         self.show_usage_values = settings.show_usage_values;
         self.show_usage_pace = settings.show_usage_pace;
-        self.compact_usage_cards = settings.compact_usage_cards;
         self.popup_visibility = settings.popup_visibility.clone();
         self.usage_stats_enabled = settings.usage_stats_enabled;
         self.usage_stats_providers = settings.usage_stats_providers();
