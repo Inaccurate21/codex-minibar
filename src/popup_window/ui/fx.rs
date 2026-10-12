@@ -362,6 +362,15 @@ impl Fx {
         self.value(id, if on { 1.0 } else { 0.0 }, duration)
     }
 
+    /// 0 → 1 from the first frame `id` is seen, then 1: content that arrives
+    /// while the popup is open grows in instead of popping.
+    pub(crate) fn appear(&mut self, id: u64, duration: Duration) -> f32 {
+        if !self.tweens.contains_key(&id) {
+            self.snap(id, 0.0);
+        }
+        self.value(id, 1.0, duration)
+    }
+
     /// Snap a value to `target` without animating (used on first mount).
     pub(crate) fn snap(&mut self, id: u64, target: f32) {
         let now = self.now();
@@ -489,6 +498,7 @@ mod tests {
                     drag_handle: false,
                     openrouter_actions: false,
                     provider_error: None,
+                    provider_status: None,
                     now: chrono::Utc::now(),
                 };
                 let sample = |session_used, weekly_used| {

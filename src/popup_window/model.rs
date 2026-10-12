@@ -31,6 +31,8 @@ pub(crate) struct CardOptions<'a> {
     /// Retain the card to report an in-flight/finished redemption, including
     /// after its last credit has been spent.
     pub(crate) keep_reset_card: bool,
+    /// Status page of the instance's driver, when it has incidents.
+    pub(crate) provider_status: Option<&'a crate::provider_status::ProviderStatus>,
     pub(crate) now: DateTime<Utc>,
 }
 
@@ -80,6 +82,8 @@ pub(crate) enum Card<'a> {
         balance_microusd: Option<u64>,
     },
     ForcedResets(Vec<&'a crate::reset_feed::ForcedReset>),
+    /// Ongoing incidents on the driver's public status page.
+    ProviderIncidents(crate::provider_status::ProviderStatus),
     /// Claude's promotional cloud-session credits: a dollar balance that
     /// expires instead of resetting.
     CloudCredits {
@@ -207,6 +211,13 @@ pub(crate) fn provider_cards<'a>(
         drag_handle: options.drag_handle,
     };
     let mut cards = vec![Card::Heading(heading)];
+    // An outage explains missing or stale numbers, so it leads the section.
+    if let Some(status) = options
+        .provider_status
+        .filter(|status| status.kind == kind && !status.incidents.is_empty())
+    {
+        cards.push(Card::ProviderIncidents(status.clone()));
+    }
     let visible = |brick: &str| {
         options.popup_visibility.is_visible_for_instance(
             provider.id(),

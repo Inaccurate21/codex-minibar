@@ -248,6 +248,7 @@ pub(crate) struct PopupRoot {
     pub(super) ui: Rc<UiState>,
     pub(super) limits: Rc<ProviderLimits>,
     pub(super) forced_resets: Rc<Vec<ForcedReset>>,
+    pub(super) provider_statuses: Rc<Vec<crate::provider_status::ProviderStatus>>,
     pub(super) palette: Palette,
     pub(super) accent: crate::theme::AccentRamp,
     /// Windows UI family used when no custom font is selected.
@@ -367,6 +368,7 @@ impl PopupRoot {
         Self {
             limits: Rc::new(state.current_limits()),
             forced_resets: Rc::new(state.current_forced_resets()),
+            provider_statuses: Rc::new(state.current_provider_statuses()),
             state,
             ui: Rc::new(ui),
             palette,
@@ -444,6 +446,7 @@ impl PopupRoot {
         // published UiState so the popup renders the tray's exact snapshot.
         self.limits = Rc::new(self.state.current_limits());
         self.forced_resets = Rc::new(self.state.current_forced_resets());
+        self.provider_statuses = Rc::new(self.state.current_provider_statuses());
         self.ui = Rc::new(ui);
         if accent_changed {
             self.accent = theme::accent_ramp(self.ui.accent_color);
@@ -732,6 +735,7 @@ impl PopupRoot {
         self.refresh_palette(window);
         self.limits = Rc::new(self.state.current_limits());
         self.forced_resets = Rc::new(self.state.current_forced_resets());
+        self.provider_statuses = Rc::new(self.state.current_provider_statuses());
         let rect = super::host_rect(monitor);
         if !already_visible {
             let closing_offset = match self.host.phase {
@@ -804,6 +808,7 @@ impl PopupRoot {
         self.refresh_palette(window);
         self.limits = Rc::new(self.state.current_limits());
         self.forced_resets = Rc::new(self.state.current_forced_resets());
+        self.provider_statuses = Rc::new(self.state.current_provider_statuses());
         let target_height = self.target_height(self.pager.current);
         self.host.height.snap(f64::from(target_height));
         let target_width = self.target_width(self.pager.current);
@@ -2233,6 +2238,7 @@ impl PopupRoot {
         let ui = Rc::clone(&self.ui);
         let limits = Rc::clone(&self.limits);
         let forced_resets = Rc::clone(&self.forced_resets);
+        let provider_statuses = Rc::clone(&self.provider_statuses);
         let show_tabs = self.show_provider_tabs();
         let mut sections = Vec::with_capacity(members.len());
         for (index, provider) in members.into_iter().enumerate() {
@@ -2250,6 +2256,9 @@ impl PopupRoot {
                 drag_handle: false,
                 openrouter_actions: provider.kind() == ProviderKind::OpenRouter,
                 provider_error: error_message.as_deref(),
+                provider_status: provider_statuses
+                    .iter()
+                    .find(|status| status.kind == provider.kind()),
                 now: Utc::now(),
             };
             let openrouter = provider.kind() == ProviderKind::OpenRouter;

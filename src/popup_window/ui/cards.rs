@@ -208,6 +208,9 @@ impl PopupRoot {
             Card::ForcedResets(resets) => {
                 self.render_forced_resets(resets, self.card_inner_width(surface), window, cx)
             }
+            Card::ProviderIncidents(status) => {
+                self.render_provider_incidents(status, self.card_inner_width(surface), window, cx)
+            }
             Card::CloudCredits {
                 key,
                 window: limit,
@@ -1625,6 +1628,134 @@ impl PopupRoot {
             );
         }
         element.into_any_element()
+    }
+
+    fn render_provider_incidents(
+        &mut self,
+        status: &crate::provider_status::ProviderStatus,
+        available_width: f32,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        use crate::provider_status::IncidentImpact;
+
+        let palette = self.palette.clone();
+        let metrics = self.metrics(window);
+        let card_key = format!("provider-incidents-{:?}", status.kind);
+        let hover_id = fx::key(card_key.as_str());
+        let hover = self.fx.toggle(
+            fx::key(("provider-incidents-hover", hover_id)),
+            self.hovered(hover_id),
+            fx::FASTER,
+        );
+        let today = Local::now().date_naive();
+        // A definite width: unbounded text would inflate the max-content
+        // width of the whole provider section, and its heading resolves the
+        // account column's percentage against that (squeezing the name).
+        let mut rows = div().flex().flex_col().gap(px(10.0)).w(px(available_width));
+        // Reveal cap: card padding, then per row the summary line, the
+        // wrapped title, a possible metadata line and the row gap.
+        let mut reveal_height = 24.0;
+        for incident in &status.incidents {
+            let severity = match incident.impact {
+                IncidentImpact::Maintenance => palette.text_secondary,
+                IncidentImpact::Degraded | IncidentImpact::PartialOutage => palette.caution,
+                IncidentImpact::MajorOutage => palette.critical,
+            };
+            let impact = incident.impact.label();
+            let since = incident.started_at.map(|started| {
+                let local = started.with_timezone(&Local);
+                let time = TimeFormat::current().format_hm(local);
+                let time = if local.date_naive() == today {
+                    time.to_string()
+                } else {
+                    format!("{}, {time}", crate::i18n::month_day(local))
+                };
+                crate::i18n::format("status-since", &[("time", time)])
+            });
+            let metadata = std::iter::once(incident.stage.label().to_owned())
+                .chain(since)
+                .collect::<Vec<_>>()
+                .join(" · ");
+            let affected = (!incident.components.is_empty())
+                .then(|| format!(" · {}", incident.components.join(", ")));
+            let summary_width = metrics.caption(impact)
+                + affected
+                    .as_deref()
+                    .map_or(0.0, |affected| metrics.caption(affected));
+            // The metadata shares the summary line while both fit, and
+            // otherwise gets its own line under the title.
+            let fits =
+                TextMetrics::fits_split(available_width, summary_width, metrics.caption(&metadata));
+            let mut summary = div()
+                .flex()
+                .flex_row()
+                .min_w_0()
+                .overflow_hidden()
+                .child(components::caption_strong(impact, severity).flex_none());
+            if let Some(affected) = affected {
+                summary = summary.child(nowrap(caption(affected, palette.text_tertiary)));
+            }
+            let title = components::body_strong(incident.title.clone(), palette.text_primary)
+                .w(px(available_width));
+            let mut content = div().flex().flex_col().gap(px(1.0));
+            content = if fits {
+                content
+                    .child(components::split_row(
+                        summary,
+                        card_metadata(metadata, &palette),
+                    ))
+                    .child(title)
+            } else {
+                content
+                    .child(summary)
+                    .child(title)
+                    .child(card_metadata(metadata, &palette))
+            };
+            reveal_height += 16.0
+                + (metrics.strong(&incident.title) / available_width.max(1.0)).ceil() * 20.0
+                + if fits { 0.0 } else { 16.0 }
+                + 10.0;
+            let row_id = fx::key(("provider-incident-row", incident.id.as_str()));
+            let url = incident.url.clone();
+            rows = rows.child(
+                div()
+                    .id(eid(format!("provider-incident-{}", incident.id)))
+                    .on_hover(self.hover_listener(
+                        row_id,
+                        Some(crate::i18n::tr("open-status-page").into()),
+                        cx,
+                    ))
+                    .on_click(move |_: &ClickEvent, _, _| {
+                        if let Err(error) = crate::updater::open_url(&url) {
+                            crate::logger::info(format!(
+                                "failed to open status page {url}: {error:#}"
+                            ));
+                        }
+                    })
+                    .child(content),
+            );
+        }
+        let mut element = card(&palette)
+            .id(eid(card_key))
+            .relative()
+            .on_hover(self.hover_listener(hover_id, None, cx));
+        if let Some(layer) = components::hover_layer(&palette, hover, palette.card_radius - 1.0) {
+            element = element.child(layer);
+        }
+        let element = element.child(div().relative().p(px(12.0)).child(rows));
+        let reveal = self
+            .fx
+            .appear(fx::key(("provider-incidents-reveal", hover_id)), fx::NORMAL);
+        if reveal >= 1.0 {
+            return element.into_any_element();
+        }
+        div()
+            .overflow_hidden()
+            .max_h(px(reveal_height * reveal))
+            .opacity(reveal)
+            .child(element)
+            .into_any_element()
     }
 
     fn render_forced_resets(

@@ -2586,3 +2586,54 @@ update-restarting = Codex Minibar を再起動しています
 
 # src/updater.rs
 update-restarting-body = まもなくアプリが再び開きます。
+
+# src/settings_window/general.rs
+provider-status = プロバイダーのステータス
+
+# src/settings_window/general.rs
+show-provider-incidents = プロバイダーのインシデントを表示
+
+# src/settings_window/general.rs
+show-provider-incidents-description = Codex、Claude、Cursor の公開ステータスページを 5 分ごとに確認し、進行中のインシデントをポップアップに表示します
+
+# src/settings_window/general.rs
+notify-about-new-incidents = 新しいインシデントを通知
+
+# src/settings_window/general.rs
+notify-about-new-incidents-description = 有効なプロバイダーの新しいインシデントがステータスページで報告されると通知します
+
+# src/popup_window/ui/cards.rs
+open-status-page = ステータスページを開く
+
+# src/notifications.rs
+provider-incident-title = { $provider }: { $impact }
+
+# src/popup_window/ui/cards.rs
+status-since = { $time } から
+
+# src/provider_status.rs
+status-impact-maintenance = メンテナンス
+
+# src/provider_status.rs
+status-impact-degraded = パフォーマンス低下
+
+# src/provider_status.rs
+status-impact-partial-outage = 部分的な障害
+
+# src/provider_status.rs
+status-impact-major-outage = 大規模な障害
+
+# src/provider_status.rs
+status-stage-investigating = 調査中
+
+# src/provider_status.rs
+status-stage-identified = 原因特定
+
+# src/provider_status.rs
+status-stage-monitoring = 監視中
+
+# src/provider_status.rs
+status-stage-in-progress = 実施中
+
+# src/settings_window/notifications.rs
+news-and-status = お知らせとステータス

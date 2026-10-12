@@ -237,6 +237,8 @@ pub enum WorkerEvent {
     ForcedResetsUpdated(crate::reset_feed::ResetFeedSnapshot),
     /// The feed refresh failed; cached forced resets remain usable.
     ForcedResetsRefreshFailed(String),
+    /// Ongoing incidents from the public status pages of watched drivers.
+    ProviderStatusUpdated(crate::provider_status::ProviderStatusSnapshot),
 }
 
 pub struct WorkerHandle {

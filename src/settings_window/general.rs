@@ -1,4 +1,4 @@
-//! General: startup, Usage Stats and the reset feed.
+//! General: startup, Usage Stats, the reset feed and provider status pages.
 
 use gpui::{AnyElement, Context, IntoElement, ParentElement, Styled, Window, div, px, relative};
 
@@ -31,6 +31,8 @@ impl SettingsWindow {
         let feed = s.notifications.forced_reset_feed_enabled;
         let feed_toasts = s.notifications.forced_reset_notifications;
         let feed_interval = s.reset_announcement_refresh_interval;
+        let status = s.notifications.provider_status_enabled;
+        let status_toasts = s.notifications.provider_status_notifications;
 
         let language = kit::card_of(k, |k| {
             vec![kit::dropdown_row(
@@ -163,6 +165,35 @@ impl SettingsWindow {
             ]
         });
 
+        let provider_status = kit::card_of(k, |k| {
+            vec![
+                kit::toggle_row(
+                    k,
+                    "general-provider-status",
+                    crate::i18n::tr("show-provider-incidents"),
+                    Some(crate::i18n::tr("show-provider-incidents-description").into()),
+                    status,
+                    Self::h(cx, |this, value: bool, _, cx| {
+                        this.edit(cx, move |settings| {
+                            settings.notifications.provider_status_enabled = value
+                        })
+                    }),
+                ),
+                kit::toggle_row(
+                    k,
+                    "general-provider-status-toast",
+                    crate::i18n::tr("notify-about-new-incidents"),
+                    Some(crate::i18n::tr("notify-about-new-incidents-description").into()),
+                    status_toasts,
+                    Self::h(cx, |this, value: bool, _, cx| {
+                        this.edit(cx, move |settings| {
+                            settings.notifications.provider_status_notifications = value
+                        })
+                    }),
+                ),
+            ]
+        });
+
         vec![
             language,
             startup,
@@ -170,6 +201,8 @@ impl SettingsWindow {
             usage,
             kit::section_heading(k, crate::i18n::tr("tibo-resets")),
             resets,
+            kit::section_heading(k, crate::i18n::tr("provider-status")),
+            provider_status,
         ]
     }
 

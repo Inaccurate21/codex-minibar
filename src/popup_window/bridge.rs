@@ -67,6 +67,30 @@ fn notify_new_forced_reset_info(
     }
 }
 
+/// Notifies once per incident (never for maintenance) of a watched driver.
+fn notify_new_provider_incidents(
+    statuses: &[crate::provider_status::ProviderStatus],
+    notified_ids: &mut HashSet<String>,
+    settings: &NotificationSettings,
+    state: &AppState,
+) {
+    if !settings.provider_status_enabled || !settings.provider_status_notifications {
+        return;
+    }
+    for status in statuses {
+        for incident in status
+            .incidents
+            .iter()
+            .filter(|incident| !incident.is_maintenance())
+        {
+            if notified_ids.insert(incident.id.clone()) {
+                notifications::show_provider_incident(status.kind, incident);
+                state.mark_provider_incident_notified(incident.id.clone());
+            }
+        }
+    }
+}
+
 /// The notification tracker of one instance, named so its toasts say which
 /// instance they are about when a driver has several.
 /// Notifies once per login when it enters Claude Code's three-day warning
@@ -204,6 +228,7 @@ pub(super) fn start_background_bridge(state: Arc<AppState>) {
         let mut notified_revisions = HashMap::<String, u64>::new();
         let mut pending_auto_activation_successes = HashSet::<ProviderId>::new();
         let mut forced_reset_notified_ids = HashSet::<String>::new();
+        let mut incident_notified_ids = HashSet::<String>::new();
         let mut usage_clear_generation = 0_u64;
         let mut pending_usage_clear: Option<(u64, Vec<ProviderId>)> = None;
         let mut update_phase = updates.snapshot();
@@ -270,6 +295,11 @@ pub(super) fn start_background_bridge(state: Arc<AppState>) {
             ui.apply_settings(&settings);
             *notification_settings = settings.notifications.clone();
             state.sync_reset_feed(&settings);
+            state.sync_provider_status(&settings);
+            if !settings.notifications.provider_status_enabled {
+                state.replace_provider_statuses(Vec::new());
+                ui.observe_provider_status_update();
+            }
             if !settings.notifications.forced_reset_feed_enabled {
                 state.replace_forced_resets(Vec::new());
                 ui.observe_forced_resets_update();
@@ -567,6 +597,23 @@ pub(super) fn start_background_bridge(state: Arc<AppState>) {
                         &notification_settings,
                         &state,
                     );
+                    publish_popup_ui(&ui);
+                }
+                Ok(WorkerEvent::ProviderStatusUpdated(snapshot)) => {
+                    incident_notified_ids.extend(snapshot.notified_ids);
+                    let statuses = if notification_settings.provider_status_enabled {
+                        snapshot.statuses
+                    } else {
+                        Vec::new()
+                    };
+                    notify_new_provider_incidents(
+                        &statuses,
+                        &mut incident_notified_ids,
+                        &notification_settings,
+                        &state,
+                    );
+                    state.replace_provider_statuses(statuses);
+                    ui.observe_provider_status_update();
                     publish_popup_ui(&ui);
                 }
                 Ok(WorkerEvent::ForcedResetsRefreshFailed(error)) => {

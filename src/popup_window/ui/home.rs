@@ -132,6 +132,7 @@ impl PopupRoot {
         let ui = Rc::clone(&self.ui);
         let limits = Rc::clone(&self.limits);
         let forced_resets = Rc::clone(&self.forced_resets);
+        let provider_statuses = Rc::clone(&self.provider_statuses);
         let show_tabs = self.show_provider_tabs();
         let show_spend = show_total_spend(&ui) && show_tabs;
         let widgets = visible_home_widgets(&ui, show_spend);
@@ -162,6 +163,9 @@ impl PopupRoot {
                         drag_handle: can_reorder,
                         openrouter_actions: provider.kind() == ProviderKind::OpenRouter,
                         provider_error: ui.provider_error(provider),
+                        provider_status: provider_statuses
+                            .iter()
+                            .find(|status| status.kind == provider.kind()),
                         now: Utc::now(),
                     };
                     let cards = provider_cards(
