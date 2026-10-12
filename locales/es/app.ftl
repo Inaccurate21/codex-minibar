@@ -1778,6 +1778,24 @@ status-stage-in-progress = En curso
 # src/settings_window/notifications.rs
 news-and-status = Novedades y estado
 
+# src/whats_new.rs
+no-summary-for-this-version = Aún no hay un resumen para esta versión. Las notas completas están en GitHub.
+
+# src/whats_new.rs
+couldn-t-load-what-s-new = No se pudieron cargar las novedades. Revisa la conexión o lee las notas en GitHub.
+
+# src/whats_new.rs
+full-release-notes = Notas completas
+
+# src/settings_window/about.rs
+show-what-s-new-after-updating = Mostrar novedades al actualizar
+
+# src/settings_window/about.rs
+a-short-summary-of-the-release-once-it-s-installed = Un breve resumen de la versión, tras instalarla.
+
+# src/settings_window/about.rs
+view = Ver
+
 # src/settings_window/general.rs
 popup-shortcut = Atajo del popup
 popup-shortcut-description = Púlsalo en cualquier lugar de Windows para mostrar u ocultar el popup.

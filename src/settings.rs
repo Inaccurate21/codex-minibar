@@ -1838,6 +1838,8 @@ pub struct Settings {
     pub notifications: NotificationSettings,
     pub history_retention_days: u16,
     pub check_for_updates: bool,
+    /// Shows a short summary of the release once after updating.
+    pub show_whats_new: bool,
     /// Draws every window on the CPU (WARP) instead of the GPU.
     pub software_rendering: bool,
 }
@@ -1900,6 +1902,7 @@ impl Default for Settings {
             notifications: NotificationSettings::default(),
             history_retention_days: 30,
             check_for_updates: true,
+            show_whats_new: true,
             software_rendering: false,
         }
     }

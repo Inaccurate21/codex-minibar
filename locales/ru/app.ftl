@@ -2674,6 +2674,24 @@ status-stage-in-progress = Идут
 # src/settings_window/notifications.rs
 news-and-status = Новости и статус
 
+# src/whats_new.rs
+no-summary-for-this-version = Для этой версии пока нет сводки. Полный список изменений есть на GitHub.
+
+# src/whats_new.rs
+couldn-t-load-what-s-new = Не удалось загрузить новинки. Проверьте подключение или откройте список изменений на GitHub.
+
+# src/whats_new.rs
+full-release-notes = Полный список изменений
+
+# src/settings_window/about.rs
+show-what-s-new-after-updating = Показывать новинки после обновления
+
+# src/settings_window/about.rs
+a-short-summary-of-the-release-once-it-s-installed = Краткая сводка о версии сразу после установки.
+
+# src/settings_window/about.rs
+view = Открыть
+
 # src/settings_window/general.rs
 popup-shortcut = Сочетание для popup
 popup-shortcut-description = Нажмите его в любом месте Windows, чтобы показать или скрыть popup.
