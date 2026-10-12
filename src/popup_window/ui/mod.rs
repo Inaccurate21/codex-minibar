@@ -22,6 +22,7 @@ mod blur_effect;
 mod root;
 pub(crate) mod theme;
 mod toast;
+mod toast_summary;
 mod tooltip;
 mod usage;
 #[cfg(windows)]

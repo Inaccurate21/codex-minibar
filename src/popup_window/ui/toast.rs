@@ -19,7 +19,7 @@ use gpui::{
     AnyElement, AppContext, AsyncApp, Bounds, ClickEvent, Context, Div, Hsla, InteractiveElement,
     IntoElement, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Window,
     WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind, WindowOptions, div, point,
-    px, relative, size,
+    prelude::FluentBuilder as _, px, relative, size,
 };
 
 use crate::{
@@ -77,6 +77,10 @@ const PROGRESS_GAP: f32 = 10.0;
 /// One sweep of an indeterminate bar, and the share of the track it covers.
 const SWEEP: Duration = Duration::from_millis(1600);
 const SWEEP_WIDTH: f32 = 0.35;
+/// A taller release summary scrolls inside the card.
+const SUMMARY_MAX_HEIGHT: f32 = 360.0;
+/// Release summaries use the card's full inner width.
+const SUMMARY_WIDTH: f32 = CARD_WIDTH - BORDER * 2.0 - PADDING * 2.0 - INSET;
 
 thread_local! {
     static HOST: RefCell<Option<WindowHandle<ToastHost>>> = const { RefCell::new(None) };
@@ -86,6 +90,8 @@ struct Card {
     id: u64,
     notification: Notification,
     height: f32,
+    /// Height of the release summary's scroll area, when it has one.
+    summary_height: f32,
     born: Instant,
     /// Lifetime used so far; it does not grow while hovered.
     shown: Duration,
@@ -276,10 +282,16 @@ impl ToastHost {
             })
     }
 
-    /// Card height for `notification`, from the same metrics the card is
-    /// laid out with. Cards have a fixed height so the stack can glide
-    /// without waiting for layout.
-    fn measure(&self, notification: &Notification, window: &Window, palette: &Palette) -> f32 {
+    /// Card height for `notification`, and the height of its summary area,
+    /// from the same metrics the card is laid out with. Cards have a fixed
+    /// height so the stack can glide without waiting for layout.
+    fn measure(
+        &self,
+        notification: &Notification,
+        window: &Window,
+        palette: &Palette,
+    ) -> (f32, f32) {
+        let mut summary_height = 0.0;
         let mut height = BORDER * 2.0 + PADDING * 2.0 + LINE;
         let alert = notification.limits.as_deref();
         if alert.is_none() && !notification.body.trim().is_empty() {
@@ -287,6 +299,12 @@ impl ToastHost {
                 CARD_WIDTH - BORDER * 2.0 - PADDING * 2.0 - INSET - GLYPH - GLYPH_GAP - CLOSE_ROOM;
             let lines = body_lines(window, &notification.body, width, &palette.font_family);
             height += BODY_GAP + lines as f32 * LINE;
+        }
+        if let Some(summary) = notification.summary.as_deref() {
+            let natural =
+                super::toast_summary::measure(window, summary, SUMMARY_WIDTH, &palette.font_family);
+            summary_height = natural.min(SUMMARY_MAX_HEIGHT);
+            height += SECTION_GAP + summary_height;
         }
         if !notification.actions.is_empty() {
             height += SECTION_GAP + BUTTON_HEIGHT;
@@ -298,7 +316,7 @@ impl ToastHost {
             let rows = quota_rows(alert).len() as f32;
             height += SECTION_GAP + LINE + rows * (palette.card_gap + LIMIT_CARD);
         }
-        height
+        (height, summary_height)
     }
 
     /// Adds a card. Returns the native work to do outside this borrow when
@@ -310,7 +328,7 @@ impl ToastHost {
         cx: &mut Context<Self>,
     ) -> bool {
         let palette = self.palette(window, cx);
-        let height = self.measure(&notification, window, &palette);
+        let (height, summary_height) = self.measure(&notification, window, &palette);
         let now = Instant::now();
         if let Some(key) = notification.key {
             let finished = notification.progress.is_none();
@@ -320,14 +338,19 @@ impl ToastHost {
                 .iter_mut()
                 .find(|card| card.leaving.is_none() && card.notification.key == Some(key))
             {
-                if finished {
+                // A finished operation sounds once; a summary filling in an
+                // already finished card stays quiet.
+                if finished && card.notification.progress.is_some() {
                     crate::notifications::play_sound(&notification);
                     // The result gets its full lifetime from now.
                     card.shown = Duration::ZERO;
                     card.last_tick = now;
                 }
+                // A summary is read at leisure: it stays until closed.
+                card.pinned |= notification.summary.is_some();
                 card.notification = notification;
                 card.height = height;
+                card.summary_height = summary_height;
                 cx.notify();
                 return false;
             }
@@ -348,15 +371,17 @@ impl ToastHost {
                 || card.notification.body != notification.body
         });
         self.next_id += 1;
+        let pinned = notification.summary.is_some();
         self.cards.push(Card {
             id: self.next_id,
             notification,
             height,
+            summary_height,
             born: now,
             shown: Duration::ZERO,
             last_tick: now,
             hovered: false,
-            pinned: false,
+            pinned,
             leaving: None,
         });
         // Too many: the oldest ones leave early.
@@ -558,6 +583,12 @@ impl Render for ToastHost {
                     animate.then(|| sweep_cycle(now.saturating_duration_since(card.born))),
                 ),
             });
+            let summary = if card.notification.summary.is_some() {
+                self.fx
+                    .appear(fx::key(("toast-summary", card.id)), fx::NORMAL)
+            } else {
+                0.0
+            };
             elements.push(self.card(
                 card,
                 CardFrame {
@@ -568,6 +599,7 @@ impl Render for ToastHost {
                     hover,
                     age: animate.then_some(age),
                     progress,
+                    summary,
                 },
                 prefs,
                 &palette,
@@ -605,6 +637,8 @@ struct CardFrame {
     /// Time since the card appeared; `None` when motion is off.
     age: Option<Duration>,
     progress: Option<BarFrame>,
+    /// Opacity of the release summary; it fades in when it fills a card.
+    summary: f32,
 }
 
 /// Per-frame state of a card's progress bar.
@@ -693,23 +727,27 @@ impl ToastHost {
                     .line_clamp(BODY_MAX_LINES),
             );
         }
+        let summary = notification.summary.as_deref();
+        let mut buttons = None;
         if !notification.actions.is_empty() {
-            let buttons =
-                notification
-                    .actions
-                    .iter()
-                    .enumerate()
-                    .map(|(index, (label, action))| {
-                        self.button(id, index, label, action.clone(), palette, cx)
-                    });
-            text = text.child(
+            buttons = Some(
                 div()
                     .mt(px(SECTION_GAP))
                     .flex()
                     .flex_row()
                     .gap(px(8.0))
-                    .children(buttons),
+                    .children(notification.actions.iter().enumerate().map(
+                        |(index, (label, action))| {
+                            self.button(id, index, label, action.clone(), palette, cx)
+                        },
+                    )),
             );
+        }
+        // With a summary the buttons go under it, at the card's edge.
+        if summary.is_none()
+            && let Some(buttons) = buttons.take()
+        {
+            text = text.child(buttons);
         }
         if let Some(bar) = frame.progress {
             text = text.child(progress_bar(bar, palette).mt(px(PROGRESS_GAP)));
@@ -762,6 +800,24 @@ impl ToastHost {
                 palette,
             ));
         }
+        if let Some(summary) = summary {
+            let column = super::toast_summary::render(id, summary, SUMMARY_WIDTH, palette);
+            // Fixed at its measured height; a taller summary scrolls.
+            content = content.child(
+                div()
+                    .id(SharedString::from(format!("toast-{id}-summary")))
+                    .mt(px(SECTION_GAP))
+                    .pl(px(INSET))
+                    .h(px(card.summary_height))
+                    .flex_none()
+                    .overflow_y_scroll()
+                    .opacity(frame.summary)
+                    .child(column),
+            );
+            if let Some(buttons) = buttons.take() {
+                content = content.child(buttons.pl(px(INSET)));
+            }
+        }
 
         div()
             .id(SharedString::from(format!("toast-{id}")))
@@ -790,9 +846,15 @@ impl ToastHost {
             .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
                 this.set_hovered(id, *hovered, cx);
             }))
-            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                this.dismiss(id, cx);
-            }))
+            // A summary is read, scrolled and clicked through; only its close
+            // button dismisses it.
+            .when(summary.is_none(), |card| {
+                card.on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                    this.dismiss(id, cx);
+                }))
+            })
+            // The summary follows the height glide instead of spilling past it.
+            .when(summary.is_some(), |card| card.overflow_hidden())
             .child(content)
             .child(close)
             .into_any_element()

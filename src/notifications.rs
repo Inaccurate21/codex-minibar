@@ -115,6 +115,10 @@ pub enum Progress {
 /// Key of the card that follows an update from download to restart.
 pub const UPDATE_PROGRESS_KEY: &str = "update-progress";
 
+/// Key of the card announcing a finished update; the release summary,
+/// once fetched, fills it in place.
+pub const UPDATE_COMPLETE_KEY: &str = "update-complete";
+
 #[derive(Clone, Debug)]
 pub struct Notification {
     pub kind: NotificationKind,
@@ -129,6 +133,9 @@ pub struct Notification {
     /// Cards with progress stay until a notification without progress
     /// replaces them (or they are closed by hand).
     pub progress: Option<Progress>,
+    /// A release summary drawn under the text. Cards with one stay until
+    /// they are closed by hand.
+    pub summary: Option<std::sync::Arc<crate::whats_new::Content>>,
 }
 
 impl Notification {
@@ -141,6 +148,7 @@ impl Notification {
             limits: None,
             key: None,
             progress: None,
+            summary: None,
         }
     }
 
@@ -151,6 +159,16 @@ impl Notification {
 
     pub fn with_progress(mut self, progress: Progress) -> Self {
         self.progress = Some(progress);
+        self
+    }
+
+    pub fn with_summary(mut self, summary: crate::whats_new::Content) -> Self {
+        self.summary = Some(std::sync::Arc::new(summary));
+        self
+    }
+
+    pub fn with_action(mut self, label: &str, action: NotificationAction) -> Self {
+        self.actions.push((label.to_owned(), action));
         self
     }
 

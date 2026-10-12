@@ -238,16 +238,29 @@ pub fn open_release_notes() -> Result<()> {
 }
 
 /// Shows a one-shot success toast after an in-place update relaunch.
-pub fn show_post_update_success_if_needed() {
+/// Returns whether this launch follows one.
+pub fn show_post_update_success_if_needed() -> bool {
     match take_post_update_success_marker() {
-        Ok(Some(version)) => notifications::show_kind(
-            notifications::NotificationKind::Success,
-            crate::i18n::tr("update-complete"),
-            &crate::i18n::format("now-running-version", &[("version", version.to_string())]),
-        ),
-        Ok(None) => {}
-        Err(error) => eprintln!("failed to read post-update marker: {error:#}"),
+        Ok(Some(version)) => {
+            notifications::notify(update_complete_notification(&version));
+            true
+        }
+        Ok(None) => false,
+        Err(error) => {
+            eprintln!("failed to read post-update marker: {error:#}");
+            false
+        }
     }
+}
+
+/// The finished-update card; [`crate::whats_new`] fills in the summary.
+pub fn update_complete_notification(version: &str) -> notifications::Notification {
+    notifications::Notification::new(
+        notifications::NotificationKind::Success,
+        crate::i18n::tr("update-complete"),
+        &crate::i18n::format("now-running-version", &[("version", version.to_string())]),
+    )
+    .keyed(notifications::UPDATE_COMPLETE_KEY)
 }
 
 /// Keeps Windows "Installed apps" DisplayVersion in sync with this binary.

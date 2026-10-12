@@ -1,6 +1,6 @@
 [package]
 name = "codex-minibar"
-version = "1.1.0"
+version = "1.2.0"
 edition = "2024"
 description = "Windows tray companion for monitoring AI tools usage"
 license = "Apache-2.0"
@@ -23,6 +23,8 @@ fontdue = "0.9"
 # they reach GPUI, whose asset cache would keep them at full size.
 image = "0.25"
 png = "0.17"
+# Release summaries ("What's new") are fetched as Markdown.
+pulldown-cmark = { version = "0.13", default-features = false }
 semver = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

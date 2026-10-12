@@ -2646,3 +2646,21 @@ status-stage-in-progress = 実施中
 
 # src/settings_window/notifications.rs
 news-and-status = お知らせとステータス
+
+# src/whats_new.rs
+no-summary-for-this-version = このバージョンの概要はまだありません。詳しいリリースノートは GitHub にあります。
+
+# src/whats_new.rs
+couldn-t-load-what-s-new = 新機能を読み込めませんでした。接続を確認するか、GitHub のリリースノートをご覧ください。
+
+# src/whats_new.rs
+full-release-notes = 詳しいリリースノート
+
+# src/settings_window/about.rs
+show-what-s-new-after-updating = アップデート後に新機能を表示
+
+# src/settings_window/about.rs
+a-short-summary-of-the-release-once-it-s-installed = インストール後にリリースの概要を表示します。
+
+# src/settings_window/about.rs
+view = 表示

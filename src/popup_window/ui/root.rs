@@ -543,7 +543,9 @@ impl PopupRoot {
     /// Screen x of the visible popup capsule's left edge, in pixels.
     #[cfg(windows)]
     pub(super) fn capsule_screen_left(&self) -> Option<i32> {
-        let hwnd = self.host.hwnd.filter(|_| self.host.visible())?;
+        // The launch prewarm renders with an empty region: nothing to avoid.
+        let shown = self.host.visible() && self.host.phase != Phase::Prewarm;
+        let hwnd = self.host.hwnd.filter(|_| shown)?;
         let rect = super::win32::window_rect(hwnd);
         Some(rect.left + (f32::from(self.capsule_origin.x) * self.host.scale).round() as i32)
     }

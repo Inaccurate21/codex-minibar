@@ -3792,3 +3792,27 @@ status-stage-in-progress = { "" }
 # English source:
 # news-and-status = News and status
 news-and-status = { "" }
+
+# English source:
+# no-summary-for-this-version = There's no summary for this version yet. The full release notes are on GitHub.
+no-summary-for-this-version = { "" }
+
+# English source:
+# couldn-t-load-what-s-new = Couldn't load what's new. Check your connection, or read the release notes on GitHub.
+couldn-t-load-what-s-new = { "" }
+
+# English source:
+# full-release-notes = Full release notes
+full-release-notes = { "" }
+
+# English source:
+# show-what-s-new-after-updating = Show what's new after updating
+show-what-s-new-after-updating = { "" }
+
+# English source:
+# a-short-summary-of-the-release-once-it-s-installed = A short summary of the release, once it's installed.
+a-short-summary-of-the-release-once-it-s-installed = { "" }
+
+# English source:
+# view = View
+view = { "" }

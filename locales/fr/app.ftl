@@ -2674,3 +2674,21 @@ status-stage-in-progress = En cours
 
 # src/settings_window/notifications.rs
 news-and-status = Actualités et état
+
+# src/whats_new.rs
+no-summary-for-this-version = Aucun résumé pour cette version pour l'instant. Les notes complètes sont sur GitHub.
+
+# src/whats_new.rs
+couldn-t-load-what-s-new = Impossible de charger les nouveautés. Vérifiez la connexion ou consultez les notes sur GitHub.
+
+# src/whats_new.rs
+full-release-notes = Notes de version complètes
+
+# src/settings_window/about.rs
+show-what-s-new-after-updating = Afficher les nouveautés après une mise à jour
+
+# src/settings_window/about.rs
+a-short-summary-of-the-release-once-it-s-installed = Un bref résumé de la version, une fois installée.
+
+# src/settings_window/about.rs
+view = Afficher

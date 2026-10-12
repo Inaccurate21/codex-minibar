@@ -29,7 +29,7 @@ fn run() -> Result<()> {
     }
     let mut settings = Settings::load_or_create(&path)?;
     settings.language.apply();
-    show_post_update_success_if_needed();
+    let just_updated = show_post_update_success_if_needed();
     if let Err(error) = settings.reconcile_startup_from_registry(&path) {
         eprintln!("failed to reconcile startup setting: {error:#}");
     }
@@ -126,6 +126,7 @@ fn run() -> Result<()> {
     // Initializes the tray accent before any popup can be shown.
     codex_minibar::theme::apply_appearance(state.settings.theme, state.settings.accent_color);
     codex_minibar::popup_window::start(Arc::clone(&state));
+    codex_minibar::whats_new::start(&state.settings, just_updated);
     if onboarding_needed {
         codex_minibar::settings_window::open_onboarding();
     }

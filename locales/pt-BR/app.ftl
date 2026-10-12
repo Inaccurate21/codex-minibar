@@ -1777,3 +1777,21 @@ status-stage-in-progress = Em andamento
 
 # src/settings_window/notifications.rs
 news-and-status = Novidades e status
+
+# src/whats_new.rs
+no-summary-for-this-version = Ainda não há um resumo para esta versão. As notas completas estão no GitHub.
+
+# src/whats_new.rs
+couldn-t-load-what-s-new = Não foi possível carregar as novidades. Verifique a conexão ou leia as notas no GitHub.
+
+# src/whats_new.rs
+full-release-notes = Notas completas
+
+# src/settings_window/about.rs
+show-what-s-new-after-updating = Mostrar novidades após atualizar
+
+# src/settings_window/about.rs
+a-short-summary-of-the-release-once-it-s-installed = Um breve resumo da versão, logo após a instalação.
+
+# src/settings_window/about.rs
+view = Ver

@@ -1756,3 +1756,21 @@ status-stage-in-progress = 进行中
 
 # src/settings_window/notifications.rs
 news-and-status = 动态与状态
+
+# src/whats_new.rs
+no-summary-for-this-version = 此版本暂无摘要。完整发行说明见 GitHub。
+
+# src/whats_new.rs
+couldn-t-load-what-s-new = 无法加载新功能。请检查网络连接，或在 GitHub 上查看发行说明。
+
+# src/whats_new.rs
+full-release-notes = 完整发行说明
+
+# src/settings_window/about.rs
+show-what-s-new-after-updating = 更新后显示新功能
+
+# src/settings_window/about.rs
+a-short-summary-of-the-release-once-it-s-installed = 安装后显示该版本的简短摘要。
+
+# src/settings_window/about.rs
+view = 查看
