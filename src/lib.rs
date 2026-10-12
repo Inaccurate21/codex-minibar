@@ -7,6 +7,7 @@ pub mod codex;
 pub mod cursor;
 pub mod discovery;
 pub mod grok;
+pub mod hotkey;
 pub mod i18n;
 pub mod instances;
 pub mod kiro;

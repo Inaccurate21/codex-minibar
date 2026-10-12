@@ -1756,3 +1756,13 @@ status-stage-in-progress = 进行中
 
 # src/settings_window/notifications.rs
 news-and-status = 动态与状态
+
+# src/settings_window/general.rs
+popup-shortcut = 弹出窗口快捷键
+popup-shortcut-description = 在 Windows 任意位置按下即可显示或隐藏弹出窗口。
+shortcut-not-set = 未设置
+press-a-shortcut = 请按下快捷键…
+popup-shortcut-recording-hint = Esc 取消，Backspace 删除快捷键。
+popup-shortcut-needs-modifier = 请包含 Ctrl、Alt 或 Win，或使用 F13–F24。
+popup-shortcut-in-use = 此快捷键已被其他应用占用，请选择其他组合。
+clear-shortcut = 删除快捷键

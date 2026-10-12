@@ -2673,3 +2673,13 @@ status-stage-in-progress = Идут
 
 # src/settings_window/notifications.rs
 news-and-status = Новости и статус
+
+# src/settings_window/general.rs
+popup-shortcut = Сочетание для popup
+popup-shortcut-description = Нажмите его в любом месте Windows, чтобы показать или скрыть popup.
+shortcut-not-set = Не задано
+press-a-shortcut = Нажмите сочетание…
+popup-shortcut-recording-hint = Esc — отмена. Backspace удаляет сочетание.
+popup-shortcut-needs-modifier = Добавьте Ctrl, Alt или Win либо используйте F13–F24.
+popup-shortcut-in-use = Это сочетание уже занято другим приложением. Выберите другое.
+clear-shortcut = Удалить сочетание

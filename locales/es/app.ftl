@@ -1777,3 +1777,13 @@ status-stage-in-progress = En curso
 
 # src/settings_window/notifications.rs
 news-and-status = Novedades y estado
+
+# src/settings_window/general.rs
+popup-shortcut = Atajo del popup
+popup-shortcut-description = Púlsalo en cualquier lugar de Windows para mostrar u ocultar el popup.
+shortcut-not-set = Sin definir
+press-a-shortcut = Pulsa un atajo…
+popup-shortcut-recording-hint = Esc cancela. Retroceso elimina el atajo.
+popup-shortcut-needs-modifier = Incluye Ctrl, Alt o Win, o usa F13–F24.
+popup-shortcut-in-use = Otra aplicación ya usa este atajo. Elige otro.
+clear-shortcut = Eliminar atajo
