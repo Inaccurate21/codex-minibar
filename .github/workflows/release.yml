@@ -11,26 +11,14 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  packages:
-    name: Build packages and draft release
-    runs-on: windows-latest
-    timeout-minutes: 120
-    env:
-      CARGO_NET_GIT_FETCH_WITH_CLI: true
-      GH_TOKEN: ${{ github.token }}
+  version:
+    name: Read version
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: 1.95.0
-          targets: i686-pc-windows-msvc, x86_64-pc-windows-msvc, aarch64-pc-windows-msvc
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-on-failure: true
 
       - name: Read version
         id: version
@@ -42,15 +30,65 @@ jobs:
             throw "Could not read package version from Cargo.toml"
           }
           $version = $match.Matches[0].Groups[1].Value
+          $tag = "v$version"
+          if ($env:GITHUB_REF_TYPE -eq "tag" -and $env:GITHUB_REF_NAME -ne $tag) {
+            throw "Git tag '$($env:GITHUB_REF_NAME)' does not match Cargo.toml version '$tag'."
+          }
           "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           Write-Host "version $version"
+
+  build:
+    name: Build ${{ matrix.arch }}
+    needs: version
+    runs-on: windows-latest
+    timeout-minutes: 90
+    strategy:
+      # A release needs every architecture, so stop the others on first failure.
+      fail-fast: true
+      matrix:
+        include:
+          - arch: x86
+            target: i686-pc-windows-msvc
+          - arch: x64
+            target: x86_64-pc-windows-msvc
+          - arch: arm64
+            target: aarch64-pc-windows-msvc
+    env:
+      CARGO_NET_GIT_FETCH_WITH_CLI: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Per-arch caches; jobs run in parallel and build disjoint targets.
+          key: ${{ matrix.arch }}
+          cache-on-failure: true
 
       - name: Fetch dependencies
         run: cargo fetch --locked
 
-      - name: Build portable zips and NSIS installers
+      - name: Build portable zip and NSIS installer
         shell: pwsh
-        run: .\build.ps1
+        run: .\build.ps1 -Arch ${{ matrix.arch }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-${{ matrix.arch }}
+          path: dist/${{ needs.version.outputs.version }}/*
+          if-no-files-found: error
+
+  streamdeck:
+    name: Pack Stream Deck plugin
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -68,29 +106,50 @@ jobs:
           npx streamdeck validate .\com.vertopolkalf.codex-minibar.sdPlugin
           npm run pack
 
-      - name: Add Stream Deck package to release assets
+      - name: Stage Stream Deck release asset
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
-          $version = "${{ steps.version.outputs.version }}"
           $pluginManifest = Get-Content -Raw "streamdeck/com.vertopolkalf.codex-minibar.sdPlugin/manifest.json" | ConvertFrom-Json
           $pluginPackage = "data/com.vertopolkalf.codex-minibar.streamDeckPlugin"
-          $assetDirectory = Join-Path "dist" $version
           if (-not (Test-Path -LiteralPath $pluginPackage -PathType Leaf)) {
             throw "Stream Deck package was not created at $pluginPackage"
           }
-          if (-not (Test-Path -LiteralPath $assetDirectory -PathType Container)) {
-            throw "Release asset directory was not created at $assetDirectory"
-          }
+          $assetDirectory = "streamdeck-asset"
+          New-Item -ItemType Directory -Path $assetDirectory -Force | Out-Null
           $assetName = "codex-minibar-streamdeck-$($pluginManifest.Version).streamDeckPlugin"
           Copy-Item -LiteralPath $pluginPackage -Destination (Join-Path $assetDirectory $assetName)
-          Write-Host "Added $assetName to release assets"
+          Write-Host "Staged $assetName"
 
-      - name: Upload build artifacts
+      - name: Upload Stream Deck artifact
         uses: actions/upload-artifact@v7
         with:
-          name: codex-minibar-${{ steps.version.outputs.version }}
-          path: dist/${{ steps.version.outputs.version }}/*
+          name: build-streamdeck
+          path: streamdeck-asset/*
+          if-no-files-found: error
+
+  release:
+    name: Draft GitHub release
+    needs: [version, build, streamdeck]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: build-*
+          merge-multiple: true
+          path: dist/${{ needs.version.outputs.version }}
+
+      - name: Upload combined artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: codex-minibar-${{ needs.version.outputs.version }}
+          path: dist/${{ needs.version.outputs.version }}/*
           if-no-files-found: error
 
       - name: Create draft GitHub release
@@ -98,17 +157,15 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $PSNativeCommandUseErrorActionPreference = $false
-          $version = "${{ steps.version.outputs.version }}"
+          $version = $env:VERSION
           $tag = "v$version"
           $assetDir = Join-Path "dist" $version
           $assets = @(Get-ChildItem -LiteralPath $assetDir -File | ForEach-Object { $_.FullName })
           if ($assets.Count -eq 0) {
             throw "No release assets found in $assetDir"
           }
-
-          if ($env:GITHUB_REF_TYPE -eq "tag" -and $env:GITHUB_REF_NAME -ne $tag) {
-            throw "Git tag '$($env:GITHUB_REF_NAME)' does not match Cargo.toml version '$tag'."
-          }
+          Write-Host "Assets:"
+          $assets | ForEach-Object { Write-Host "  $_" }
 
           $existing = gh release view $tag --json isDraft 2>$null
           if ($LASTEXITCODE -eq 0 -and $existing) {
