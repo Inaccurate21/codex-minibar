@@ -2664,3 +2664,13 @@ a-short-summary-of-the-release-once-it-s-installed = インストール後にリ
 
 # src/settings_window/about.rs
 view = 表示
+
+# src/settings_window/general.rs
+popup-shortcut = ポップアップのショートカット
+popup-shortcut-description = Windows のどこからでも押すと、ポップアップを表示または非表示にします。
+shortcut-not-set = 未設定
+press-a-shortcut = ショートカットを押してください…
+popup-shortcut-recording-hint = Esc でキャンセル、Backspace でショートカットを削除します。
+popup-shortcut-needs-modifier = Ctrl、Alt、Win のいずれかを含めるか、F13〜F24 を使ってください。
+popup-shortcut-in-use = このショートカットは別のアプリで使用されています。別の組み合わせを選んでください。
+clear-shortcut = ショートカットを削除

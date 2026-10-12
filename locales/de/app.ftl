@@ -2685,3 +2685,13 @@ a-short-summary-of-the-release-once-it-s-installed = Eine kurze Zusammenfassung 
 
 # src/settings_window/about.rs
 view = Anzeigen
+
+# src/settings_window/general.rs
+popup-shortcut = Popup-Tastenkürzel
+popup-shortcut-description = Drücken Sie es überall in Windows, um das Popup ein- oder auszublenden.
+shortcut-not-set = Nicht festgelegt
+press-a-shortcut = Tastenkürzel drücken…
+popup-shortcut-recording-hint = Esc bricht ab. Rücktaste entfernt das Tastenkürzel.
+popup-shortcut-needs-modifier = Verwenden Sie Strg, Alt oder Win, oder F13–F24.
+popup-shortcut-in-use = Dieses Tastenkürzel wird bereits von einer anderen App verwendet. Wählen Sie ein anderes.
+clear-shortcut = Tastenkürzel entfernen

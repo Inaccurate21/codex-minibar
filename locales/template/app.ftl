@@ -3816,3 +3816,34 @@ a-short-summary-of-the-release-once-it-s-installed = { "" }
 # English source:
 # view = View
 view = { "" }
+
+# popup-shortcut = Popup shortcut
+popup-shortcut = { "" }
+
+# English source:
+# popup-shortcut-description = Press it anywhere in Windows to show or hide the popup.
+popup-shortcut-description = { "" }
+
+# English source:
+# shortcut-not-set = Not set
+shortcut-not-set = { "" }
+
+# English source:
+# press-a-shortcut = Press a shortcut…
+press-a-shortcut = { "" }
+
+# English source:
+# popup-shortcut-recording-hint = Esc cancels. Backspace removes the shortcut.
+popup-shortcut-recording-hint = { "" }
+
+# English source:
+# popup-shortcut-needs-modifier = Include Ctrl, Alt or Win, or use F13–F24.
+popup-shortcut-needs-modifier = { "" }
+
+# English source:
+# popup-shortcut-in-use = Another app already uses this shortcut. Choose a different one.
+popup-shortcut-in-use = { "" }
+
+# English source:
+# clear-shortcut = Remove shortcut
+clear-shortcut = { "" }

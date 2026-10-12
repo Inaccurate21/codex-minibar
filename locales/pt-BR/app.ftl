@@ -1795,3 +1795,13 @@ a-short-summary-of-the-release-once-it-s-installed = Um breve resumo da versão,
 
 # src/settings_window/about.rs
 view = Ver
+
+# src/settings_window/general.rs
+popup-shortcut = Atalho do popup
+popup-shortcut-description = Pressione-o em qualquer lugar do Windows para mostrar ou ocultar o popup.
+shortcut-not-set = Não definido
+press-a-shortcut = Pressione um atalho…
+popup-shortcut-recording-hint = Esc cancela. Backspace remove o atalho.
+popup-shortcut-needs-modifier = Inclua Ctrl, Alt ou Win, ou use F13–F24.
+popup-shortcut-in-use = Outro aplicativo já usa este atalho. Escolha outro.
+clear-shortcut = Remover atalho

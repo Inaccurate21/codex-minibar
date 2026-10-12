@@ -2691,3 +2691,13 @@ a-short-summary-of-the-release-once-it-s-installed = Краткая сводка
 
 # src/settings_window/about.rs
 view = Открыть
+
+# src/settings_window/general.rs
+popup-shortcut = Сочетание для popup
+popup-shortcut-description = Нажмите его в любом месте Windows, чтобы показать или скрыть popup.
+shortcut-not-set = Не задано
+press-a-shortcut = Нажмите сочетание…
+popup-shortcut-recording-hint = Esc — отмена. Backspace удаляет сочетание.
+popup-shortcut-needs-modifier = Добавьте Ctrl, Alt или Win либо используйте F13–F24.
+popup-shortcut-in-use = Это сочетание уже занято другим приложением. Выберите другое.
+clear-shortcut = Удалить сочетание

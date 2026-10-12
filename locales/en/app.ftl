@@ -2684,3 +2684,13 @@ a-short-summary-of-the-release-once-it-s-installed = A short summary of the rele
 
 # src/settings_window/about.rs
 view = View
+
+# src/settings_window/general.rs
+popup-shortcut = Popup shortcut
+popup-shortcut-description = Press it anywhere in Windows to show or hide the popup.
+shortcut-not-set = Not set
+press-a-shortcut = Press a shortcut…
+popup-shortcut-recording-hint = Esc cancels. Backspace removes the shortcut.
+popup-shortcut-needs-modifier = Include Ctrl, Alt or Win, or use F13–F24.
+popup-shortcut-in-use = Another app already uses this shortcut. Choose a different one.
+clear-shortcut = Remove shortcut

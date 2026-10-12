@@ -2692,3 +2692,13 @@ a-short-summary-of-the-release-once-it-s-installed = Un bref résumé de la vers
 
 # src/settings_window/about.rs
 view = Afficher
+
+# src/settings_window/general.rs
+popup-shortcut = Raccourci du popup
+popup-shortcut-description = Appuyez dessus n'importe où dans Windows pour afficher ou masquer le popup.
+shortcut-not-set = Non défini
+press-a-shortcut = Appuyez sur un raccourci…
+popup-shortcut-recording-hint = Échap annule. Retour arrière supprime le raccourci.
+popup-shortcut-needs-modifier = Incluez Ctrl, Alt ou Win, ou utilisez F13–F24.
+popup-shortcut-in-use = Une autre application utilise déjà ce raccourci. Choisissez-en un autre.
+clear-shortcut = Supprimer le raccourci
