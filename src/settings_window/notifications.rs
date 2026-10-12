@@ -1,4 +1,6 @@
-//! Notifications: activation results, resets and low-usage thresholds.
+//! Notifications: activation results, resets, low-usage thresholds and
+//! every news/status toast, so any notification can be silenced here even
+//! when its feature lives on another page.
 
 use gpui::{AnyElement, Context, IntoElement, ParentElement, Styled, div, px};
 
@@ -48,6 +50,49 @@ impl SettingsWindow {
                 ),
             ]
         });
+        let news = kit::card_of(k, |k| {
+            vec![
+                kit::toggle_row(
+                    k,
+                    "notif-provider-incidents",
+                    crate::i18n::tr("notify-about-new-incidents"),
+                    Some(crate::i18n::tr("notify-about-new-incidents-description").into()),
+                    n.provider_status_notifications,
+                    Self::h(cx, |this, value: bool, _, cx| {
+                        this.edit(cx, move |s| {
+                            s.notifications.provider_status_notifications = value
+                        })
+                    }),
+                ),
+                kit::toggle_row(
+                    k,
+                    "notif-tibo-resets",
+                    crate::i18n::tr("notify-when-new-reset-info-arrives"),
+                    Some(
+                        crate::i18n::tr(
+                            "shows-a-notification-when-the-feed-reports-a-possible-reset-never",
+                        )
+                        .into(),
+                    ),
+                    n.forced_reset_notifications,
+                    Self::h(cx, |this, value: bool, _, cx| {
+                        this.edit(cx, move |s| {
+                            s.notifications.forced_reset_notifications = value
+                        })
+                    }),
+                ),
+                kit::toggle_row(
+                    k,
+                    "notif-update-available",
+                    crate::i18n::tr("notify-when-a-new-version-is-found"),
+                    None,
+                    n.update_available,
+                    Self::h(cx, |this, value: bool, _, cx| {
+                        this.edit(cx, move |s| s.notifications.update_available = value)
+                    }),
+                ),
+            ]
+        });
         let sound = kit::card_of(k, |k| {
             vec![kit::toggle_row(
                 k,
@@ -92,6 +137,8 @@ impl SettingsWindow {
             kit::section_heading(k, crate::i18n::tr("low-usage")),
             low,
             weekly,
+            kit::section_heading(k, crate::i18n::tr("news-and-status")),
+            news,
         ]
     }
 

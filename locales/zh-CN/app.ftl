@@ -1696,3 +1696,54 @@ update-restarting = 正在重启 Codex Minibar
 
 # src/updater.rs
 update-restarting-body = 应用即将重新打开。
+
+# src/settings_window/general.rs
+provider-status = 提供商状态
+
+# src/settings_window/general.rs
+show-provider-incidents = 显示提供商事件
+
+# src/settings_window/general.rs
+show-provider-incidents-description = 每 5 分钟检查 Codex、Claude 和 Cursor 的公开状态页，并在弹出窗口中显示正在进行的事件
+
+# src/settings_window/general.rs
+notify-about-new-incidents = 新事件通知
+
+# src/settings_window/general.rs
+notify-about-new-incidents-description = 当状态页报告已启用提供商的新事件时显示通知
+
+# src/popup_window/ui/cards.rs
+open-status-page = 打开状态页
+
+# src/notifications.rs
+provider-incident-title = { $provider }：{ $impact }
+
+# src/popup_window/ui/cards.rs
+status-since = 始于 { $time }
+
+# src/provider_status.rs
+status-impact-maintenance = 维护
+
+# src/provider_status.rs
+status-impact-degraded = 性能下降
+
+# src/provider_status.rs
+status-impact-partial-outage = 部分中断
+
+# src/provider_status.rs
+status-impact-major-outage = 严重中断
+
+# src/provider_status.rs
+status-stage-investigating = 调查中
+
+# src/provider_status.rs
+status-stage-identified = 已确定原因
+
+# src/provider_status.rs
+status-stage-monitoring = 监控中
+
+# src/provider_status.rs
+status-stage-in-progress = 进行中
+
+# src/settings_window/notifications.rs
+news-and-status = 动态与状态

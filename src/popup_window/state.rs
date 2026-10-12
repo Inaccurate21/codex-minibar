@@ -67,12 +67,16 @@ pub struct AppState {
     /// Latest valid public forced-reset announcements. Kept outside UiState so
     /// hidden popups avoid a full native-tree publish on every feed poll.
     pub forced_resets: Mutex<Vec<crate::reset_feed::ForcedReset>>,
+    /// Ongoing status-page incidents of watched drivers.
+    pub provider_statuses: Mutex<Vec<crate::provider_status::ProviderStatus>>,
     pub commands: Mutex<HashMap<ProviderId, Sender<WorkerCommand>>>,
     pub workers: Mutex<crate::provider::ProviderWorkers>,
     pub worker_events_rx: Mutex<Option<Receiver<WorkerEvent>>>,
     pub worker_events_tx: Sender<WorkerEvent>,
     /// Independent public-feed worker for announced Codex forced resets.
     pub reset_feed_worker: Mutex<Option<crate::reset_feed::ResetFeedWorker>>,
+    /// Public status-page poller for provider incidents.
+    pub provider_status_worker: Mutex<Option<crate::provider_status::ProviderStatusWorker>>,
     pub activation_path: std::path::PathBuf,
     /// Provider-scoped errors from workers that could not be created at startup.
     /// They remain visible until that provider returns a successful limits
@@ -204,6 +208,42 @@ impl AppState {
             ));
     }
 
+    pub(super) fn current_provider_statuses(&self) -> Vec<crate::provider_status::ProviderStatus> {
+        self.provider_statuses
+            .lock()
+            .map(|statuses| statuses.clone())
+            .unwrap_or_default()
+    }
+
+    pub(super) fn replace_provider_statuses(
+        &self,
+        statuses: Vec<crate::provider_status::ProviderStatus>,
+    ) {
+        if let Ok(mut current) = self.provider_statuses.lock() {
+            *current = statuses;
+        }
+    }
+
+    fn send_provider_status(&self, command: crate::provider_status::ProviderStatusCommand) {
+        if let Ok(worker) = self.provider_status_worker.lock()
+            && let Some(worker) = worker.as_ref()
+        {
+            let _ = worker.commands.send(command);
+        }
+    }
+
+    pub(super) fn sync_provider_status(&self, settings: &Settings) {
+        self.send_provider_status(crate::provider_status::ProviderStatusCommand::Watch(
+            crate::provider_status::watched_kinds(settings),
+        ));
+    }
+
+    pub(super) fn mark_provider_incident_notified(&self, id: String) {
+        self.send_provider_status(crate::provider_status::ProviderStatusCommand::MarkNotified(
+            id,
+        ));
+    }
+
     pub(super) fn mark_forced_reset_info_notified(&self, id: String) {
         let Ok(worker) = self.reset_feed_worker.lock() else {
             return;
@@ -300,6 +340,11 @@ impl AppState {
         {
             worker.shutdown();
         }
+        if let Ok(mut worker) = self.provider_status_worker.lock()
+            && let Some(worker) = worker.take()
+        {
+            worker.shutdown();
+        }
     }
 }
 
@@ -333,6 +378,7 @@ pub(crate) struct UiState {
     pub(super) usage_revision: u64,
     /// Same bridge for the independently polled forced-reset feed.
     pub(super) forced_resets_revision: u64,
+    pub(super) provider_status_revision: u64,
     /// Provider limit/usage requests currently in flight. The refresh icon
     /// stays active until every operation started by the workers has finished.
     pub(super) active_requests: Vec<(ProviderId, RequestKind)>,
@@ -386,6 +432,7 @@ impl Default for UiState {
             limits_revision: 0,
             usage_revision: 0,
             forced_resets_revision: 0,
+            provider_status_revision: 0,
             active_requests: Vec::new(),
             refreshing: false,
             show_used_percentage: false,
@@ -752,5 +799,9 @@ impl UiState {
 
     pub(super) fn observe_forced_resets_update(&mut self) {
         self.forced_resets_revision = self.forced_resets_revision.wrapping_add(1);
+    }
+
+    pub(super) fn observe_provider_status_update(&mut self) {
+        self.provider_status_revision = self.provider_status_revision.wrapping_add(1);
     }
 }

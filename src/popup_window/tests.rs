@@ -60,6 +60,7 @@ fn test_cards<'a>(
             drag_handle: false,
             openrouter_actions: false,
             provider_error: None,
+            provider_status: None,
             now: Utc::now(),
         },
     )
@@ -313,6 +314,7 @@ fn reset_card_keeps_instance_identity_and_last_credit_result_surface() {
                     drag_handle: false,
                     openrouter_actions: false,
                     provider_error: None,
+                    provider_status: None,
                     keep_reset_card: true,
                     now: Utc::now(),
                 },

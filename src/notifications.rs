@@ -269,6 +269,34 @@ pub fn show_update_failed(error: &anyhow::Error) {
     );
 }
 
+/// A new incident on a provider's public status page.
+pub fn show_provider_incident(
+    kind: crate::settings::ProviderKind,
+    incident: &crate::provider_status::StatusIncident,
+) {
+    let severity = if incident.impact == crate::provider_status::IncidentImpact::MajorOutage {
+        NotificationKind::Error
+    } else {
+        NotificationKind::Warning
+    };
+    let mut notification = Notification::new(
+        severity,
+        &crate::i18n::format(
+            "provider-incident-title",
+            &[
+                ("provider", kind.display_name().to_string()),
+                ("impact", incident.impact.label().to_string()),
+            ],
+        ),
+        &incident.title,
+    );
+    notification.actions = vec![(
+        crate::i18n::tr("open-status-page").to_owned(),
+        NotificationAction::OpenUrl(incident.url.clone()),
+    )];
+    notify(notification);
+}
+
 fn update_available(version: &str, release_url: &str) -> Notification {
     let mut notification = Notification::new(
         NotificationKind::Update,

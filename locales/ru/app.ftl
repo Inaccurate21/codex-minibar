@@ -2613,3 +2613,54 @@ update-restarting = Перезапуск Codex Minibar
 
 # src/updater.rs
 update-restarting-body = Приложение сейчас откроется снова.
+
+# src/settings_window/general.rs
+provider-status = Статус провайдеров
+
+# src/settings_window/general.rs
+show-provider-incidents = Показывать инциденты провайдеров
+
+# src/settings_window/general.rs
+show-provider-incidents-description = Каждые 5 минут проверяет публичные статус-страницы Codex, Claude и Cursor и показывает текущие инциденты в окне
+
+# src/settings_window/general.rs
+notify-about-new-incidents = Уведомлять о новых инцидентах
+
+# src/settings_window/general.rs
+notify-about-new-incidents-description = Показывает уведомление, когда статус-страница сообщает о новом инциденте у включённого провайдера
+
+# src/popup_window/ui/cards.rs
+open-status-page = Открыть статус-страницу
+
+# src/notifications.rs
+provider-incident-title = { $provider }: { $impact }
+
+# src/popup_window/ui/cards.rs
+status-since = С { $time }
+
+# src/provider_status.rs
+status-impact-maintenance = Техработы
+
+# src/provider_status.rs
+status-impact-degraded = Снижение производительности
+
+# src/provider_status.rs
+status-impact-partial-outage = Частичный сбой
+
+# src/provider_status.rs
+status-impact-major-outage = Крупный сбой
+
+# src/provider_status.rs
+status-stage-investigating = Расследуется
+
+# src/provider_status.rs
+status-stage-identified = Причина найдена
+
+# src/provider_status.rs
+status-stage-monitoring = Наблюдение
+
+# src/provider_status.rs
+status-stage-in-progress = Идут
+
+# src/settings_window/notifications.rs
+news-and-status = Новости и статус

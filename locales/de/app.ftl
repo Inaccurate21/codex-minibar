@@ -2607,3 +2607,54 @@ update-restarting = Codex Minibar wird neu gestartet
 
 # src/updater.rs
 update-restarting-body = Die App öffnet sich gleich wieder.
+
+# src/settings_window/general.rs
+provider-status = Anbieterstatus
+
+# src/settings_window/general.rs
+show-provider-incidents = Anbietervorfälle anzeigen
+
+# src/settings_window/general.rs
+show-provider-incidents-description = Prüft alle 5 Minuten die öffentlichen Statusseiten von Codex, Claude und Cursor und zeigt laufende Vorfälle im Popup an
+
+# src/settings_window/general.rs
+notify-about-new-incidents = Über neue Vorfälle benachrichtigen
+
+# src/settings_window/general.rs
+notify-about-new-incidents-description = Zeigt eine Benachrichtigung, wenn eine Statusseite einen neuen Vorfall bei einem aktivierten Anbieter meldet
+
+# src/popup_window/ui/cards.rs
+open-status-page = Statusseite öffnen
+
+# src/notifications.rs
+provider-incident-title = { $provider }: { $impact }
+
+# src/popup_window/ui/cards.rs
+status-since = Seit { $time }
+
+# src/provider_status.rs
+status-impact-maintenance = Wartung
+
+# src/provider_status.rs
+status-impact-degraded = Eingeschränkte Leistung
+
+# src/provider_status.rs
+status-impact-partial-outage = Teilausfall
+
+# src/provider_status.rs
+status-impact-major-outage = Schwerer Ausfall
+
+# src/provider_status.rs
+status-stage-investigating = Wird untersucht
+
+# src/provider_status.rs
+status-stage-identified = Ursache gefunden
+
+# src/provider_status.rs
+status-stage-monitoring = Wird beobachtet
+
+# src/provider_status.rs
+status-stage-in-progress = Läuft
+
+# src/settings_window/notifications.rs
+news-and-status = Neuigkeiten und Status

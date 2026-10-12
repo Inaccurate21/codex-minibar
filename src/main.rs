@@ -8,7 +8,7 @@ use codex_minibar::{
     app::AppState,
     notifications,
     provider::start_enabled_workers_with_limits,
-    reset_feed,
+    provider_status, reset_feed,
     scheduler::ActivationState,
     settings::Settings,
     single_instance::{self, SingleInstance},
@@ -61,6 +61,11 @@ fn run() -> Result<()> {
         reset_feed::cache_path(&path),
         worker_events_tx.clone(),
     );
+    let provider_status_worker = provider_status::start_worker(
+        &settings,
+        provider_status::cache_path(&path),
+        worker_events_tx.clone(),
+    );
     let hydrated_limits = store::shared()
         .and_then(|shared| {
             let store = shared
@@ -97,11 +102,13 @@ fn run() -> Result<()> {
         settings,
         limits: Mutex::new(hydrated_limits),
         forced_resets: Mutex::new(Vec::new()),
+        provider_statuses: Mutex::new(Vec::new()),
         commands: Mutex::new(commands),
         workers: Mutex::new(workers),
         worker_events_rx: Mutex::new(Some(worker_events_rx)),
         worker_events_tx,
         reset_feed_worker: Mutex::new(Some(reset_feed_worker)),
+        provider_status_worker: Mutex::new(Some(provider_status_worker)),
         activation_path,
         startup_provider_errors,
         last_activation_at,

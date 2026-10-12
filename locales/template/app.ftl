@@ -3712,3 +3712,71 @@ update-restarting = { "" }
 # English source:
 # update-restarting-body = The app will reopen in a moment.
 update-restarting-body = { "" }
+
+# English source:
+# provider-status = Provider status
+provider-status = { "" }
+
+# English source:
+# show-provider-incidents = Show provider incidents
+show-provider-incidents = { "" }
+
+# English source:
+# show-provider-incidents-description = Checks the public status pages of Codex, Claude and Cursor every 5 minutes and shows ongoing incidents in the popup
+show-provider-incidents-description = { "" }
+
+# English source:
+# notify-about-new-incidents = Notify about new incidents
+notify-about-new-incidents = { "" }
+
+# English source:
+# notify-about-new-incidents-description = Shows a notification when a status page reports a new incident for an enabled provider
+notify-about-new-incidents-description = { "" }
+
+# English source:
+# open-status-page = Open status page
+open-status-page = { "" }
+
+# English source:
+# provider-incident-title = { $provider }: { $impact }
+provider-incident-title = { "" }
+
+# English source:
+# status-since = Since { $time }
+status-since = { "" }
+
+# English source:
+# status-impact-maintenance = Maintenance
+status-impact-maintenance = { "" }
+
+# English source:
+# status-impact-degraded = Degraded performance
+status-impact-degraded = { "" }
+
+# English source:
+# status-impact-partial-outage = Partial outage
+status-impact-partial-outage = { "" }
+
+# English source:
+# status-impact-major-outage = Major outage
+status-impact-major-outage = { "" }
+
+# English source:
+# status-stage-investigating = Investigating
+status-stage-investigating = { "" }
+
+# English source:
+# status-stage-identified = Identified
+status-stage-identified = { "" }
+
+# English source:
+# status-stage-monitoring = Monitoring
+status-stage-monitoring = { "" }
+
+# English source:
+# status-stage-in-progress = In progress
+status-stage-in-progress = { "" }
+
+# English source:
+# news-and-status = News and status
+news-and-status = { "" }

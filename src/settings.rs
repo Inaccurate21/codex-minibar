@@ -1714,6 +1714,10 @@ pub struct NotificationSettings {
     /// Notify when new forced-reset information arrives. This is
     /// not the API-driven notification that confirms an actual reset.
     pub forced_reset_notifications: bool,
+    /// Poll the public status pages of enabled providers for incidents.
+    pub provider_status_enabled: bool,
+    /// Notify when a status page reports a new incident.
+    pub provider_status_notifications: bool,
     /// Play the kind's sound with each notification.
     pub sound: bool,
 }
@@ -1733,6 +1737,8 @@ impl Default for NotificationSettings {
             update_available: true,
             forced_reset_feed_enabled: true,
             forced_reset_notifications: true,
+            provider_status_enabled: true,
+            provider_status_notifications: true,
             sound: true,
         }
     }
