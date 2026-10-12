@@ -31,34 +31,99 @@ Codex Minibar reads quota data from locally authenticated provider sessions and 
 
 > Codex Minibar is an independent project. It is not affiliated with, endorsed by, or sponsored by OpenAI.
 
-<table>
-  <tr>
-    <td width="50%"><img src="docs/screenshots/usage-stats.png" alt="Codex Minibar usage stats popup"></td>
-    <td width="50%"><img src="docs/screenshots/usage-analytics.png" alt="Codex Minibar usage analytics popup"></td>
-  </tr>
-</table>
+<p align="center">
+  <img src="docs/media/1.0.0/home.png" alt="Codex Minibar popup with Home, Usage and a provider tab">
+</p>
 
 ## Features
 
-- Show five-hour and weekly usage in one or more configurable tray icons.
-- Choose numbers, bars, rings, reset times, or reset countdowns; show remaining or used
-  percentage as appropriate.
-- Track Kiro's monthly included credits and reset date in its provider card and tray widget.
-- Open a compact native popup for the current plan, credits, limit windows, and local token
-  statistics (today, the configured history window, and a compact activity bar chart).
-- Receive Windows notifications when a limit resets, usage becomes low, Codex cannot be
-  reached, or an update is available.
-- Receive announced Codex forced-reset countdowns from the public GitHub feed. The feed
+### Every subscription in one popup
+
+Click the tray icon for a native popup with the current plan, five-hour and weekly windows,
+credits, reset countdowns and usage pace of every enabled provider: Codex, Claude, Cursor,
+OpenCode Zen, OpenCode Go, OpenRouter, Antigravity, Grok, and Kiro. Providers are enabled
+independently in **Settings → Providers** and refresh independently. Antigravity, Grok and
+Kiro show subscription quota rather than unrelated API billing.
+
+### Several accounts and your own Home
+
+Add several accounts of any provider, each with its own name, badge color, refresh interval
+and tab. Edit Home to choose Cards, Lines, Rings or Tiles per provider, reorder blocks and pick
+what shows on Home.
+
+<p align="center">
+  <img src="docs/media/1.0.0/accounts.webp" alt="Several accounts and Home layouts">
+</p>
+
+### Usage and cost analytics
+
+The Usage tab scans local provider history for animated cost and token charts, per-model
+breakdowns, provider rankings and a spend donut on Home. Everything stays on your PC.
+
+<p align="center">
+  <img src="docs/media/1.0.0/usage.webp" alt="Usage tab with cost and token charts">
+</p>
+
+### Notifications that show the quota
+
+Animated in-app notifications with sounds arrive when a limit resets, usage runs low, an
+activation finishes or an update is ready. Limit alerts show the quota they are about. Any
+notification can be turned off in **Settings → Notifications**.
+
+<p align="center">
+  <img src="docs/media/1.0.0/notifications.webp" alt="Limit and update notifications">
+</p>
+
+### Themes
+
+Fluent, Vercel, Apple, or any installed VS Code color theme with contrast and tint controls.
+Pick an accent color, a font and an independent popup border. Auto follows the Windows theme.
+
+<p align="center">
+  <img src="docs/media/1.0.0/themes.webp" alt="Popup themes">
+</p>
+
+### Eight languages
+
+English, Русский, Deutsch, Français, Español, Português (Brasil), 日本語 and 简体中文.
+Auto follows the Windows display language.
+
+<p align="center">
+  <img src="docs/media/1.0.0/languages.webp" alt="Popup in different languages">
+</p>
+
+### OpenRouter keys
+
+See spending per key and manage OpenRouter API keys from the popup's OpenRouter tab.
+
+<p align="center">
+  <img src="docs/media/1.0.0/openrouter.webp" alt="OpenRouter key management">
+</p>
+
+### More features
+
+- Configurable tray icons: numbers, bars, rings, reset times or reset countdowns, showing
+  remaining or used percentage. Use several icons for several providers.
+- Ongoing Codex, Claude and Cursor incidents from their public status pages, with an optional
+  notification when a new incident starts. Only components that affect each provider's coding
+  tools count.
+- Redeem banked Codex and Claude resets from the popup.
+- Announced Codex forced-reset countdowns from the public reset feed (Tibo Resets). The feed
   contract and bot update rules live in [`docs/codex-resets-feed.md`](docs/codex-resets-feed.md).
-- Optionally start Codex automatically to activate a fresh five-hour window.
-- Configure planned limit activations and provider-specific quiet periods for
-  automatic activation, such as keeping a work Claude session inactive on weekends.
-- Use the optional Stream Deck companion to place independently configured quota
-  indicators on hardware keys, open the popup or a provider tab, and launch Minibar
-  on click when it is not running.
-- Start with Windows, update in place from GitHub Releases, and retain history locally.
-- Detect Codex installations automatically, with an override for a custom executable path.
-- Enable Codex, Claude, Cursor, OpenCode Zen, OpenCode Go, OpenRouter, Antigravity, Grok, and Kiro independently in **Settings → Providers**. Providers refresh independently; Antigravity, Grok, and Kiro show subscription quota rather than unrelated API billing.
+- Optionally start Codex automatically to activate a fresh five-hour window, plan activations
+  ahead, and set provider-specific quiet periods, such as keeping a work Claude session inactive
+  on weekends.
+- Usage pace indicators show whether you are burning a window faster than it resets.
+- Kiro's monthly included credits and reset date, and Claude cloud-session credit balances.
+- Warnings before a Claude login stops renewing.
+- An optional Stream Deck companion with quota keys that open the popup or a provider tab and
+  launch Minibar when it is not running.
+- Start with Windows, update in place from GitHub Releases, and keep usage history locally.
+- Automatic Codex discovery with an override for a custom executable path.
+- Settings import and export, and a live software rendering option for systems where GPU
+  rendering misbehaves.
+- An AI troubleshooting handoff: `minibar trouble`, or **Settings → Log → Run Troubleshoot
+  with AI**.
 
 ## Requirements
 
