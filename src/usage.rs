@@ -155,6 +155,14 @@ pub(crate) struct CachedSessionFile {
     pub(crate) fork_copy_anchor_ms: i64,
     #[serde(default)]
     pub(crate) session_id: String,
+    /// Normalized working directory from the rollout's session metadata, for
+    /// the per-project breakdown. `None` until looked up; empty when the log
+    /// names none.
+    #[serde(default)]
+    pub(crate) cwd: Option<String>,
+    /// True when the stored `cwd` row equals `cwd` and `session_id`.
+    #[serde(skip)]
+    pub(crate) cwd_persisted: bool,
     /// True when the stored rows for this file are known to equal this value.
     /// Defaults to false so freshly built files are always written; the store
     /// sets it on load and every mutation below clears it.
@@ -173,6 +181,15 @@ impl CachedSessionFile {
         self.suppressing_fork_copies = false;
         self.fork_copy_anchor_ms = 0;
         self.session_id.clear();
+        // The rebuilt scan re-reads session_meta, which may name a new session.
+        self.cwd_persisted = false;
+    }
+
+    fn set_cwd(&mut self, cwd: String) {
+        if self.cwd.as_deref() != Some(cwd.as_str()) {
+            self.cwd = Some(cwd);
+            self.cwd_persisted = false;
+        }
     }
 
     fn add(&mut self, timestamp: DateTime<Utc>, usage: TokenUsage, model: Option<&str>) {
@@ -420,6 +437,7 @@ pub(crate) fn scan_file_delta(
         cached.reset_scan_state();
     }
     if file_size == cached.offset {
+        backfill_codex_cwd(path, cached);
         return Ok(FileDelta { events, rebuilt });
     }
 
@@ -468,7 +486,37 @@ pub(crate) fn scan_file_delta(
         cached.persisted = false;
     }
     cached.offset = offset;
+    backfill_codex_cwd(path, cached);
     Ok(FileDelta { events, rebuilt })
+}
+
+/// Logs scanned before projects were tracked already sit past their
+/// session_meta line. Read just that header once instead of rescanning.
+fn backfill_codex_cwd(path: &Path, cached: &mut CachedSessionFile) {
+    if cached.cwd.is_some() {
+        return;
+    }
+    cached.set_cwd(read_codex_cwd(path).unwrap_or_default());
+}
+
+fn read_codex_cwd(path: &Path) -> Option<String> {
+    let reader = BufReader::new(File::open(path).ok()?);
+    // session_meta is the first record; a few lines of slack cover writers
+    // that emit a preamble.
+    for line in reader.lines().take(8) {
+        let line = line.ok()?;
+        if !line.contains("\"session_meta\"") {
+            continue;
+        }
+        let event: Value = serde_json::from_str(&line).ok()?;
+        if event.get("type").and_then(Value::as_str) == Some("session_meta") {
+            return event
+                .pointer("/payload/cwd")
+                .and_then(Value::as_str)
+                .map(crate::usage_projects::normalize_cwd);
+        }
+    }
+    None
 }
 
 /// Returns active rollouts plus archived ones. An active path wins when an
@@ -589,6 +637,9 @@ fn ingest_codex_line(
         if let Some(id) = id {
             cached.session_id = id.to_owned();
         }
+        if let Some(cwd) = payload.get("cwd").and_then(Value::as_str) {
+            cached.set_cwd(crate::usage_projects::normalize_cwd(cwd));
+        }
         if let Some(timestamp_ms) = parse_line_timestamp_ms(&event)
             && is_forked_session_meta(payload)
         {
@@ -603,6 +654,11 @@ fn ingest_codex_line(
             && !model.is_empty()
         {
             cached.current_model = Some(model.to_owned());
+        }
+        if cached.cwd.as_deref().is_none_or(str::is_empty)
+            && let Some(cwd) = payload.get("cwd").and_then(Value::as_str)
+        {
+            cached.set_cwd(crate::usage_projects::normalize_cwd(cwd));
         }
         return None;
     }
@@ -724,6 +780,22 @@ pub(crate) struct CachedClaudeSessionFile {
     /// to equal the stored rows `0..count`. `None` forces a full rewrite.
     #[serde(skip)]
     pub(crate) persisted: Option<(u64, usize)>,
+    /// Normalized working directory named by the log, for the per-project
+    /// breakdown. `None` until looked up; empty when the log names none.
+    #[serde(default)]
+    pub(crate) cwd: Option<String>,
+    /// True when the stored `cwd` row equals `cwd`.
+    #[serde(skip)]
+    pub(crate) cwd_persisted: bool,
+}
+
+impl CachedClaudeSessionFile {
+    fn set_cwd(&mut self, cwd: String) {
+        if self.cwd.as_deref() != Some(cwd.as_str()) {
+            self.cwd = Some(cwd);
+            self.cwd_persisted = false;
+        }
+    }
 }
 
 /// Returns Claude Code usage from the on-disk cache without opening a log.
@@ -753,7 +825,9 @@ pub fn refresh_claude_usage_statistics(
     // Idle refreshes usually find every log exactly where the last scan left
     // it. Answer those from the stored rollups instead of loading, rebuilding
     // and rewriting every cached event.
-    if claude_logs_unchanged(provider, &roots, &files)? {
+    if claude_logs_unchanged(provider, &roots, &files)?
+        && !store::with_store(|store| store.claude_projects_missing(provider))?
+    {
         return load_cached_claude_usage_statistics(provider, history_days);
     }
     let mut cache = store::with_store(|store| store.load_claude_cache(provider))?;
@@ -767,10 +841,22 @@ pub fn refresh_claude_usage_statistics(
         let cached = cache.files.entry(key).or_default();
         scan_claude_file_delta(&path, cached)?;
     }
+    // Logs Claude Code already deleted can no longer be read for a `cwd`;
+    // their project falls back to a sibling log or the project folder name.
+    for (path, cached) in &mut cache.files {
+        if cached.cwd.is_none() && !known_paths.contains(path) {
+            cached.set_cwd(String::new());
+        }
+    }
     let oldest = Local::now().date_naive() - Duration::days(CACHE_RETENTION_DAYS - 1);
     prune_claude_history(&mut cache, &known_paths, oldest);
     cache.version = CLAUDE_CACHE_VERSION;
-    let entries = deduplicate_claude_entries(&cache);
+    let entries = deduplicate_claude_entries_by_file(&cache);
+    let project_daily = claude_project_daily(&cache, &entries);
+    let entries = entries
+        .into_iter()
+        .map(|(_, entry)| entry)
+        .collect::<Vec<_>>();
     let stats = claude_statistics(&entries, history_days);
     let model_daily = claude_model_daily(&entries)
         .into_iter()
@@ -780,7 +866,8 @@ pub fn refresh_claude_usage_statistics(
     store::with_store(|store| {
         store.save_claude_cache(provider, &cache)?;
         store.replace_usage_daily(provider, &stats.daily)?;
-        store.replace_usage_model_daily(provider, &model_daily)
+        store.replace_usage_model_daily(provider, &model_daily)?;
+        store.replace_usage_project_daily(provider, &project_daily)
     })?;
     Ok(stats)
 }
@@ -857,6 +944,58 @@ pub(crate) fn aggregate_claude_model_daily(
     claude_model_daily(&deduplicate_claude_entries(cache))
 }
 
+/// `(project cwd, date, usage)` rows for `usage_project_daily`.
+pub(crate) fn aggregate_claude_project_daily(
+    cache: &ClaudeUsageCache,
+) -> Vec<(String, NaiveDate, TokenUsage)> {
+    claude_project_daily(cache, &deduplicate_claude_entries_by_file(cache))
+}
+
+/// Folder below `projects` that holds a Claude log. Claude Code derives it
+/// from the session's working directory, so it still identifies the project
+/// after the log itself is deleted.
+fn claude_project_folder(path: &str) -> Option<&str> {
+    let mut parts = path.split(['/', '\\']);
+    parts.find(|part| *part == "projects")?;
+    parts.next().filter(|part| !part.is_empty())
+}
+
+fn claude_project_daily(
+    cache: &ClaudeUsageCache,
+    entries: &[(&str, &CachedClaudeUsageEntry)],
+) -> Vec<(String, NaiveDate, TokenUsage)> {
+    // A log without its own `cwd` (deleted, or no conversation line yet)
+    // shares the project folder of its siblings.
+    let mut folder_cwd = HashMap::<&str, &str>::new();
+    for (path, file) in &cache.files {
+        if let (Some(folder), Some(cwd)) = (
+            claude_project_folder(path),
+            file.cwd.as_deref().filter(|cwd| !cwd.is_empty()),
+        ) {
+            folder_cwd.entry(folder).or_insert(cwd);
+        }
+    }
+    let mut merged = BTreeMap::<(&str, NaiveDate), TokenUsage>::new();
+    for (path, entry) in entries {
+        let own = cache
+            .files
+            .get(*path)
+            .and_then(|file| file.cwd.as_deref())
+            .filter(|cwd| !cwd.is_empty());
+        let folder = claude_project_folder(path);
+        let project = own
+            .or_else(|| folder.and_then(|folder| folder_cwd.get(folder).copied()))
+            .or(folder)
+            .unwrap_or("");
+        let date = entry.timestamp.with_timezone(&Local).date_naive();
+        merged.entry((project, date)).or_default().add(&entry.usage);
+    }
+    merged
+        .into_iter()
+        .map(|((project, date), usage)| (project.to_owned(), date, usage))
+        .collect()
+}
+
 fn claude_statistics(entries: &[&CachedClaudeUsageEntry], history_days: u16) -> UsageStatistics {
     let days: Vec<DailyTokenUsage> = entries
         .iter()
@@ -884,13 +1023,27 @@ fn claude_model_daily(entries: &[&CachedClaudeUsageEntry]) -> Vec<(NaiveDate, St
 /// Mirrors Claude Code/OpenUsage's duplicate preference: the original message
 /// beats a sidechain replay; otherwise retain the richer/larger record.
 pub(crate) fn deduplicate_claude_entries(cache: &ClaudeUsageCache) -> Vec<&CachedClaudeUsageEntry> {
-    let mut entries: Vec<&CachedClaudeUsageEntry> = Vec::new();
+    deduplicate_claude_entries_by_file(cache)
+        .into_iter()
+        .map(|(_, entry)| entry)
+        .collect()
+}
+
+/// [`deduplicate_claude_entries`] keeping the log each surviving entry came from.
+fn deduplicate_claude_entries_by_file(
+    cache: &ClaudeUsageCache,
+) -> Vec<(&str, &CachedClaudeUsageEntry)> {
+    let mut entries: Vec<(&str, &CachedClaudeUsageEntry)> = Vec::new();
     let mut exact = HashMap::<(&str, Option<&str>), usize>::new();
     let mut by_message = HashMap::<&str, Vec<usize>>::new();
 
-    for entry in cache.files.values().flat_map(|file| &file.entries) {
+    for (path, entry) in cache
+        .files
+        .iter()
+        .flat_map(|(path, file)| file.entries.iter().map(move |entry| (path.as_str(), entry)))
+    {
         let Some(message_id) = entry.message_id.as_deref() else {
-            entries.push(entry);
+            entries.push((path, entry));
             continue;
         };
         let key = (message_id, entry.request_id.as_deref());
@@ -899,7 +1052,7 @@ pub(crate) fn deduplicate_claude_entries(cache: &ClaudeUsageCache) -> Vec<&Cache
                 indices
                     .iter()
                     .copied()
-                    .find(|&index| entry.is_sidechain || entries[index].is_sidechain)
+                    .find(|&index| entry.is_sidechain || entries[index].1.is_sidechain)
             })
         });
         if let Some(index) = collision {
@@ -908,19 +1061,19 @@ pub(crate) fn deduplicate_claude_entries(cache: &ClaudeUsageCache) -> Vec<&Cache
             if exact.contains_key(&key) {
                 continue;
             }
-            if claude_entry_should_replace(entry, entries[index]) {
-                let previous = entries[index];
+            if claude_entry_should_replace(entry, entries[index].1) {
+                let previous = entries[index].1;
                 if let Some(previous_id) = previous.message_id.as_deref() {
                     exact.remove(&(previous_id, previous.request_id.as_deref()));
                 }
-                entries[index] = entry;
+                entries[index] = (path, entry);
                 exact.insert(key, index);
             }
             continue;
         }
 
         let index = entries.len();
-        entries.push(entry);
+        entries.push((path, entry));
         exact.insert(key, index);
         by_message.entry(message_id).or_default().push(index);
     }
@@ -950,6 +1103,7 @@ fn scan_claude_file_delta(path: &Path, cached: &mut CachedClaudeSessionFile) -> 
         cached.persisted = None;
     }
     if file_size == cached.offset {
+        backfill_claude_cwd(path, cached);
         return Ok(());
     }
 
@@ -969,6 +1123,11 @@ fn scan_claude_file_delta(path: &Path, cached: &mut CachedClaudeSessionFile) -> 
             break;
         }
         offset = offset.saturating_add(read as u64);
+        if cached.cwd.as_deref().is_none_or(str::is_empty)
+            && let Some(cwd) = claude_cwd_from_line(&bytes)
+        {
+            cached.set_cwd(cwd);
+        }
         if !std::str::from_utf8(&bytes).is_ok_and(|line| line.contains("\"usage\"")) {
             continue;
         }
@@ -977,7 +1136,48 @@ fn scan_claude_file_delta(path: &Path, cached: &mut CachedClaudeSessionFile) -> 
         }
     }
     cached.offset = offset;
+    backfill_claude_cwd(path, cached);
     Ok(())
+}
+
+/// Logs scanned before projects were tracked: read from the start until a
+/// line names the working directory, once per log.
+fn backfill_claude_cwd(path: &Path, cached: &mut CachedClaudeSessionFile) {
+    if cached.cwd.is_some() {
+        return;
+    }
+    let mut cwd = String::new();
+    if let Ok(file) = File::open(path) {
+        let mut reader = BufReader::new(file);
+        let mut bytes = Vec::new();
+        // Conversation lines all carry `cwd`; the bound only guards logs that
+        // hold nothing but snapshots or summaries.
+        for _ in 0..64 {
+            bytes.clear();
+            if !matches!(reader.read_until(b'\n', &mut bytes), Ok(read) if read > 0) {
+                break;
+            }
+            if let Some(found) = claude_cwd_from_line(&bytes) {
+                cwd = found;
+                break;
+            }
+        }
+    }
+    cached.set_cwd(cwd);
+}
+
+fn claude_cwd_from_line(line: &[u8]) -> Option<String> {
+    #[derive(Deserialize)]
+    struct CwdLine {
+        cwd: Option<Value>,
+    }
+    // Cheap substring gate before parsing the line.
+    if !line.windows(6).any(|window| window == b"\"cwd\":") {
+        return None;
+    }
+    let event: CwdLine = serde_json::from_slice(line).ok()?;
+    let cwd = crate::usage_projects::normalize_cwd(event.cwd.as_ref()?.as_str()?);
+    (!cwd.is_empty()).then_some(cwd)
 }
 
 /// The few fields a Claude log line contributes. Everything else (message
@@ -1230,6 +1430,7 @@ mod tests {
                     offset: 0,
                     entries: vec![first.clone(), repeat],
                     persisted: None,
+                    ..Default::default()
                 },
             )]),
         };
@@ -1270,6 +1471,7 @@ mod tests {
                         offset: 0,
                         entries: vec![original],
                         persisted: None,
+                        ..Default::default()
                     },
                 ),
                 (
@@ -1278,6 +1480,7 @@ mod tests {
                         offset: 0,
                         entries: vec![replay],
                         persisted: None,
+                        ..Default::default()
                     },
                 ),
             ]),
@@ -1306,6 +1509,7 @@ mod tests {
             offset: 1,
             entries,
             persisted: None,
+            ..Default::default()
         }
     }
 
@@ -1508,5 +1712,100 @@ mod tests {
             &mut cached,
         );
         assert_eq!(cached.session_id, "child");
+    }
+
+    #[test]
+    fn codex_session_meta_records_the_working_directory() {
+        let mut cached = CachedSessionFile::default();
+        ingest_codex_line(
+            r#"{"timestamp":"2026-07-14T10:00:00Z","type":"session_meta","payload":{"id":"s","cwd":"/work/app/"}}"#,
+            &mut cached,
+        );
+        assert_eq!(cached.cwd.as_deref(), Some("/work/app"));
+        assert!(!cached.cwd_persisted);
+        // A later turn in another folder does not move the session.
+        ingest_codex_line(
+            r#"{"type":"turn_context","payload":{"model":"gpt-5.4","cwd":"/elsewhere"}}"#,
+            &mut cached,
+        );
+        assert_eq!(cached.cwd.as_deref(), Some("/work/app"));
+    }
+
+    #[test]
+    fn codex_backfill_reads_cwd_from_an_already_scanned_log() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("rollout.jsonl");
+        std::fs::write(
+            &path,
+            "{\"type\":\"session_meta\",\"payload\":{\"id\":\"s\",\"cwd\":\"/work/app\"}}\n",
+        )
+        .unwrap();
+        let mut cached = CachedSessionFile {
+            offset: std::fs::metadata(&path).unwrap().len(),
+            saw_session_meta: true,
+            ..Default::default()
+        };
+        scan_file_delta(&path, "sessions/rollout.jsonl", &mut cached).unwrap();
+        assert_eq!(cached.cwd.as_deref(), Some("/work/app"));
+    }
+
+    #[test]
+    fn claude_projects_dedupe_and_fall_back_to_the_project_folder() {
+        let entry = |id: &str, tokens: u64| CachedClaudeUsageEntry {
+            timestamp: "2026-07-14T10:00:00Z".parse().unwrap(),
+            message_id: Some(id.into()),
+            request_id: Some(id.into()),
+            is_sidechain: false,
+            has_speed: false,
+            usage: TokenUsage {
+                input_tokens: tokens,
+                requests: 1,
+                ..Default::default()
+            },
+            model: Some("claude-sonnet-4-20250514".into()),
+        };
+        let file = |cwd: &str, entries| CachedClaudeSessionFile {
+            entries,
+            cwd: Some(cwd.into()),
+            ..Default::default()
+        };
+        let cache = ClaudeUsageCache {
+            version: CLAUDE_CACHE_VERSION,
+            files: BTreeMap::from([
+                (
+                    "/h/.claude/projects/-work-app/a.jsonl".into(),
+                    file("/work/app", vec![entry("m1", 10)]),
+                ),
+                // Deleted log: its cwd is unknown, but a sibling names it.
+                // The repeated m1 must not be counted twice.
+                (
+                    "/h/.claude/projects/-work-app/b.jsonl".into(),
+                    file("", vec![entry("m1", 10), entry("m2", 5)]),
+                ),
+                // No log in the folder names a cwd.
+                (
+                    "/h/.claude/projects/-old-tool/c.jsonl".into(),
+                    file("", vec![entry("m3", 2)]),
+                ),
+            ]),
+        };
+        let rows = aggregate_claude_project_daily(&cache)
+            .into_iter()
+            .map(|(project, _, usage)| (project, usage.input_tokens))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            rows,
+            vec![("-old-tool".to_owned(), 2), ("/work/app".to_owned(), 15)]
+        );
+    }
+
+    #[test]
+    fn claude_cwd_is_read_from_conversation_lines() {
+        assert_eq!(
+            claude_cwd_from_line(br#"{"type":"user","cwd":"C:\\Dev\\app","message":{}}"#)
+                .as_deref(),
+            Some(r"C:\Dev\app")
+        );
+        assert_eq!(claude_cwd_from_line(br#"{"type":"summary"}"#), None);
     }
 }

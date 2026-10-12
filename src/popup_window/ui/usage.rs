@@ -1192,14 +1192,19 @@ impl PopupRoot {
             fx::key("usage-breakdown"),
             vec![
                 crate::i18n::tr("model").into(),
+                crate::i18n::tr("project").into(),
                 crate::i18n::tr("day").into(),
             ],
-            usize::from(breakdown == BreakdownMode::Day),
+            match breakdown {
+                BreakdownMode::Model => 0,
+                BreakdownMode::Project => 1,
+                BreakdownMode::Day => 2,
+            },
             |this, index, _| {
-                this.overview_breakdown = if index == 0 {
-                    BreakdownMode::Model
-                } else {
-                    BreakdownMode::Day
+                this.overview_breakdown = match index {
+                    0 => BreakdownMode::Model,
+                    1 => BreakdownMode::Project,
+                    _ => BreakdownMode::Day,
                 };
             },
             window,
@@ -1218,7 +1223,24 @@ impl PopupRoot {
         let control = self.usage_breakdown_control(window, cx);
         let colored = self.ui.use_colored_provider_icons;
         let table = match breakdown {
-            BreakdownMode::Model => model_breakdown_table(&snapshot.model_rows, &palette, colored),
+            BreakdownMode::Model => breakdown_table(
+                crate::i18n::tr("model"),
+                &snapshot.model_rows,
+                &palette,
+                colored,
+                &mut |_, content| content.into_any_element(),
+            ),
+            BreakdownMode::Project if snapshot.project_rows.is_empty() => div().child(caption(
+                crate::i18n::tr("no-project-usage"),
+                palette.text_tertiary,
+            )),
+            BreakdownMode::Project => breakdown_table(
+                crate::i18n::tr("project"),
+                &snapshot.project_rows,
+                &palette,
+                colored,
+                &mut |row, content| self.project_row(row, content, cx),
+            ),
             BreakdownMode::Day => {
                 day_breakdown_table(snapshot, self.overview_metric, &palette, colored)
             }
@@ -1231,6 +1253,44 @@ impl PopupRoot {
             ))
             .child(table)
             .into_any_element()
+    }
+
+    /// Project rows open their folder in Explorer; the hover tip shows the path.
+    fn project_row(
+        &mut self,
+        row: &BreakdownRow,
+        content: gpui::Div,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        // Padding pulled back by an equal negative margin keeps the text
+        // aligned with the header while the hover fill gets some room.
+        let content = content.relative().px(px(4.0)).py(px(2.0));
+        let row_box = div().mx(px(-4.0)).my(px(-2.0));
+        let Some(path) = row.path.clone() else {
+            return row_box.child(content).into_any_element();
+        };
+        let palette = self.palette.clone();
+        let hover_id = fx::key(("usage-project-row", path.as_str()));
+        let hover = self.fx.toggle(
+            fx::key(("usage-project-row-fx", path.as_str())),
+            self.hovered(hover_id),
+            fx::FASTER,
+        );
+        let mut element = row_box
+            .id(eid(format!("usage-project-{path}")))
+            .relative()
+            .rounded(px(palette.control_radius))
+            .cursor_pointer()
+            .on_hover(self.hover_listener(hover_id, Some(path.clone().into()), cx))
+            .on_click(move |_: &ClickEvent, _, _| {
+                if let Err(error) = crate::updater::open_path(std::path::Path::new(&path)) {
+                    crate::logger::info(format!("failed to open project folder {path}: {error:#}"));
+                }
+            });
+        if let Some(layer) = components::hover_layer(&palette, hover, palette.control_radius) {
+            element = element.child(layer);
+        }
+        element.child(content).into_any_element()
     }
 }
 
@@ -1365,16 +1425,20 @@ fn cell(width: f32, content: impl IntoElement) -> gpui::Div {
         .child(content)
 }
 
-fn model_breakdown_table(rows: &[BreakdownRow], palette: &Palette, colored: bool) -> gpui::Div {
+/// Model and project breakdowns. Model rows carry their `provider`; project
+/// rows mark every provider that worked in the project.
+fn breakdown_table(
+    title: &'static str,
+    rows: &[BreakdownRow],
+    palette: &Palette,
+    colored: bool,
+    wrap_row: &mut dyn FnMut(&BreakdownRow, gpui::Div) -> AnyElement,
+) -> gpui::Div {
     let header = div()
         .flex()
         .flex_row()
         .items_center()
-        .child(
-            div()
-                .flex_1()
-                .child(caption(crate::i18n::tr("model"), palette.text_tertiary)),
-        )
+        .child(div().flex_1().child(caption(title, palette.text_tertiary)))
         .child(cell(
             56.0,
             caption(crate::i18n::tr("cost"), palette.text_tertiary),
@@ -1395,7 +1459,11 @@ fn model_breakdown_table(rows: &[BreakdownRow], palette: &Palette, colored: bool
             .items_center()
             .gap(px(4.0))
             .min_w_0();
-        if let Some(provider) = row.provider {
+        let providers: Vec<ProviderId> = match row.provider {
+            Some(provider) => vec![provider],
+            None => row.by_provider.keys().copied().collect(),
+        };
+        for provider in &providers {
             title = title.child(components::provider_mark(
                 crate::provider_registry::icon(provider.kind()),
                 14.0,
@@ -1405,13 +1473,21 @@ fn model_breakdown_table(rows: &[BreakdownRow], palette: &Palette, colored: bool
             ));
         }
         title = title.child(
-            nowrap(caption(row.label.clone(), palette.text_primary))
-                .ml(px(if row.provider.is_some() { 2.0 } else { 0.0 })),
+            nowrap(caption(
+                row.label.clone(),
+                if row.unknown {
+                    palette.text_tertiary
+                } else {
+                    palette.text_primary
+                },
+            ))
+            .ml(px(if providers.is_empty() { 0.0 } else { 2.0 })),
         );
         if let Some(weekday) = &row.weekday {
             title = title.child(caption(weekday.clone(), palette.text_tertiary));
         }
-        list = list.child(
+        list = list.child(wrap_row(
+            row,
             div()
                 .flex()
                 .flex_row()
@@ -1429,7 +1505,7 @@ fn model_breakdown_table(rows: &[BreakdownRow], palette: &Palette, colored: bool
                     56.0,
                     caption(format_token_count(row.tokens), palette.text_primary),
                 )),
-        );
+        ));
     }
     div()
         .flex()

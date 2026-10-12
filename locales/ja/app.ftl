@@ -179,6 +179,15 @@ split-by-token-type = トークンの種類ごとにバーを分割する
 model = モデル
 
 # src/popup_window/ui/usage.rs
+project = プロジェクト
+
+# src/usage_overview.rs
+unknown-project = 不明なプロジェクト
+
+# src/popup_window/ui/usage.rs
+no-project-usage = この期間のプロジェクトデータはありません
+
+# src/popup_window/ui/usage.rs
 tokens = トークン
 
 # src/popup_window/ui/usage.rs

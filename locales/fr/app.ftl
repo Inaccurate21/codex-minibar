@@ -179,6 +179,15 @@ split-by-token-type = Diviser les barres par type de jeton
 model = Modèle
 
 # src/popup_window/ui/usage.rs
+project = Projet
+
+# src/usage_overview.rs
+unknown-project = Projet inconnu
+
+# src/popup_window/ui/usage.rs
+no-project-usage = Aucune donnée de projet sur cette période
+
+# src/popup_window/ui/usage.rs
 tokens = Jetons
 
 # src/popup_window/ui/usage.rs

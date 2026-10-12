@@ -239,6 +239,18 @@ split-by-token-type = { "" }
 model = { "" }
 
 # English source:
+# project = Project
+project = { "" }
+
+# English source:
+# unknown-project = Unknown project
+unknown-project = { "" }
+
+# English source:
+# no-project-usage = No project data in this period
+no-project-usage = { "" }
+
+# English source:
 # tokens = Tokens
 tokens = { "" }
 

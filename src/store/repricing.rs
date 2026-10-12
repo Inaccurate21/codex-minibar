@@ -355,6 +355,10 @@ impl ProviderStore {
                 .collect::<Vec<_>>();
             self.replace_usage_daily_in_transaction(id, &stats.daily)?;
             self.replace_usage_model_daily_in_transaction(id, &model_daily)?;
+            self.replace_usage_project_daily_in_transaction(
+                id,
+                &usage::aggregate_claude_project_daily(&cache),
+            )?;
         }
         tx.commit()?;
         Ok(!touched.is_empty())

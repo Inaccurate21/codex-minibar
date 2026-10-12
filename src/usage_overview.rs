@@ -64,6 +64,7 @@ impl OverviewRange {
 pub enum BreakdownMode {
     #[default]
     Model,
+    Project,
     Day,
 }
 
@@ -98,7 +99,16 @@ pub struct BreakdownRow {
     pub priced_requests: u64,
     pub share: f64,
     pub by_provider: BTreeMap<ProviderId, TokenUsage>,
+    /// Project row collecting usage whose working directory is unknown.
+    pub unknown: bool,
+    /// Project folder the row opens when clicked; only set for folders that
+    /// exist on this PC.
+    pub path: Option<String>,
 }
+
+/// Projects that cost less than this in the selected range are left out of
+/// the project breakdown: ten cents, in micro-USD.
+const MIN_PROJECT_COST_MICROUSD: u64 = 100_000;
 
 #[derive(Clone, Debug, Default)]
 pub struct OverviewSnapshot {
@@ -110,6 +120,8 @@ pub struct OverviewSnapshot {
     pub providers: Vec<ProviderOverview>,
     pub daily_series: Vec<DailySeriesPoint>,
     pub model_rows: Vec<BreakdownRow>,
+    /// One row per repository; `by_provider` holds each provider's share.
+    pub project_rows: Vec<BreakdownRow>,
     pub day_rows: Vec<BreakdownRow>,
 }
 
@@ -246,7 +258,14 @@ fn assemble_overview_snapshot(
         let mut provider_hourly = BTreeMap::new();
         let mut provider_sessions = BTreeMap::new();
         let mut model_rows = BTreeMap::<(ProviderId, String), TokenUsage>::new();
+        let mut project_cwds = Vec::<(ProviderId, String, TokenUsage)>::new();
         for provider in &spend_providers {
+            for (cwd, usage) in store
+                .load_project_breakdown(*provider, start_date, end_date)
+                .unwrap_or_default()
+            {
+                project_cwds.push((*provider, cwd, usage));
+            }
             let statistics = store
                 .load_usage_daily(*provider, load_days)
                 .unwrap_or_default();
@@ -293,11 +312,13 @@ fn assemble_overview_snapshot(
             provider_hourly,
             provider_sessions,
             model_rows,
+            project_cwds,
         ))
     })
     .unwrap_or_default();
 
-    let (provider_daily, provider_hourly, provider_sessions, mut model_rows) = store_data;
+    let (provider_daily, provider_hourly, provider_sessions, mut model_rows, project_cwds) =
+        store_data;
     let codex = ProviderId::primary(ProviderKind::Codex);
     let codex_has_usage = provider_daily.get(&codex).is_some_and(|days| {
         days.iter().any(|entry| {
@@ -426,6 +447,8 @@ fn assemble_overview_snapshot(
                     priced_requests,
                     share: metric_value as f64 / total_metric as f64 * 100.0,
                     by_provider,
+                    unknown: false,
+                    path: None,
                 }
             })
             .filter(|row| row.tokens > 0 || row.cost_microusd > 0)
@@ -483,6 +506,8 @@ fn assemble_overview_snapshot(
                     priced_requests: usage.priced_requests,
                     share: metric_value as f64 / total_metric as f64 * 100.0,
                     by_provider: providers.clone(),
+                    unknown: false,
+                    path: None,
                 }
             })
             .collect();
@@ -527,12 +552,15 @@ fn assemble_overview_snapshot(
                 OverviewMetric::Tokens => usage.total_tokens() as f64 / total_metric as f64 * 100.0,
             },
             by_provider: BTreeMap::new(),
+            unknown: false,
+            path: None,
         })
         .collect();
     snapshot.model_rows.sort_by(|left, right| match metric {
         OverviewMetric::Cost => right.cost_microusd.cmp(&left.cost_microusd),
         OverviewMetric::Tokens => right.tokens.cmp(&left.tokens),
     });
+    snapshot.project_rows = project_rows(project_cwds, metric, total_metric);
 
     // Keep in-memory limits as a fallback when the store has not hydrated yet.
     if snapshot.totals.requests == 0 {
@@ -646,7 +674,112 @@ pub fn exclude_providers(
     for row in &mut snapshot.model_rows {
         row.share = share(row.cost_microusd, row.tokens);
     }
+    for row in &mut snapshot.project_rows {
+        row.by_provider
+            .retain(|provider, _| !excluded.contains(provider));
+        sum_row_providers(row);
+        row.share = share(row.cost_microusd, row.tokens);
+    }
     snapshot
+        .project_rows
+        .retain(|row| row.cost_microusd >= MIN_PROJECT_COST_MICROUSD);
+    sort_rows(&mut snapshot.project_rows, metric);
+    snapshot
+}
+
+/// Folds `(provider, cwd, usage)` rows into one row per repository, largest
+/// first. Usage without a known working directory is collected last.
+fn project_rows(
+    cwds: Vec<(ProviderId, String, TokenUsage)>,
+    metric: OverviewMetric,
+    total_metric: u64,
+) -> Vec<BreakdownRow> {
+    let mut projects =
+        BTreeMap::<String, (String, String, BTreeMap<ProviderId, TokenUsage>)>::new();
+    for (provider, cwd, usage) in cwds {
+        let (key, name, root) = match crate::usage_projects::resolve(&cwd) {
+            Some(project) => (project.key, project.name, project.root),
+            None => (String::new(), String::new(), String::new()),
+        };
+        projects
+            .entry(key)
+            .or_insert_with(|| (name, root, BTreeMap::new()))
+            .2
+            .entry(provider)
+            .or_default()
+            .add(&usage);
+    }
+    let mut name_counts = BTreeMap::<String, usize>::new();
+    for (key, (name, _, _)) in &projects {
+        if !key.is_empty() {
+            *name_counts.entry(name.to_lowercase()).or_default() += 1;
+        }
+    }
+    let mut rows: Vec<BreakdownRow> = projects
+        .into_iter()
+        .map(|(key, (name, root, by_provider))| {
+            let label = if key.is_empty() {
+                crate::i18n::tr("unknown-project").to_owned()
+            } else if name_counts.get(&name.to_lowercase()).copied().unwrap_or(0) > 1 {
+                // Same folder name in two places: prefix the parent folder.
+                disambiguated_name(&root, &name)
+            } else {
+                name
+            };
+            let mut row = BreakdownRow {
+                label,
+                unknown: key.is_empty(),
+                path: (!key.is_empty() && std::path::Path::new(&root).is_dir())
+                    .then(|| root.clone()),
+                by_provider,
+                ..Default::default()
+            };
+            sum_row_providers(&mut row);
+            let value = match metric {
+                OverviewMetric::Cost => row.cost_microusd,
+                OverviewMetric::Tokens => row.tokens,
+            };
+            row.share = value as f64 / total_metric.max(1) as f64 * 100.0;
+            row
+        })
+        .filter(|row| row.cost_microusd >= MIN_PROJECT_COST_MICROUSD)
+        .collect();
+    sort_rows(&mut rows, metric);
+    rows
+}
+
+fn disambiguated_name(root: &str, name: &str) -> String {
+    std::path::Path::new(root)
+        .parent()
+        .and_then(|parent| parent.file_name())
+        .map(|parent| format!("{}/{name}", parent.to_string_lossy()))
+        .unwrap_or_else(|| root.to_owned())
+}
+
+/// Recomputes a row's totals from its per-provider usage.
+fn sum_row_providers(row: &mut BreakdownRow) {
+    let usage = row
+        .by_provider
+        .values()
+        .fold(TokenUsage::default(), |mut total, usage| {
+            total.add(usage);
+            total
+        });
+    row.cost_microusd = usage.estimated_cost_microusd;
+    row.tokens = usage.total_tokens();
+    row.requests = usage.requests;
+    row.priced_requests = usage.priced_requests;
+}
+
+/// Largest first by the active metric; the unknown-project row always sinks
+/// to the bottom.
+fn sort_rows(rows: &mut [BreakdownRow], metric: OverviewMetric) {
+    rows.sort_by(|left, right| {
+        left.unknown.cmp(&right.unknown).then_with(|| match metric {
+            OverviewMetric::Cost => right.cost_microusd.cmp(&left.cost_microusd),
+            OverviewMetric::Tokens => right.tokens.cmp(&left.tokens),
+        })
+    });
 }
 
 fn weekday_short(date: NaiveDate) -> &'static str {
@@ -802,5 +935,42 @@ mod tests {
                 (ProviderKind::Claude.into(), 500_000),
             ]
         );
+    }
+
+    #[test]
+    fn project_rows_hide_projects_under_ten_cents() {
+        let codex = ProviderId::primary(ProviderKind::Codex);
+        let claude = ProviderId::primary(ProviderKind::Claude);
+        let cost = |microusd| TokenUsage {
+            input_tokens: 10,
+            requests: 1,
+            estimated_cost_microusd: microusd,
+            priced_requests: 1,
+            ..Default::default()
+        };
+        let rows = project_rows(
+            vec![
+                (codex, "big-app".into(), cost(60_000)),
+                (claude, "big-app".into(), cost(50_000)),
+                (codex, "tiny-app".into(), cost(99_999)),
+                (codex, String::new(), cost(200_000)),
+            ],
+            OverviewMetric::Cost,
+            310_000,
+        );
+        let labels = rows
+            .iter()
+            .map(|row| (row.label.as_str(), row.cost_microusd, row.unknown))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            labels,
+            vec![
+                ("big-app", 110_000, false),
+                (crate::i18n::tr("unknown-project"), 200_000, true),
+            ]
+        );
+        assert_eq!(rows[0].by_provider.len(), 2);
+        // A name is not a folder on this PC, so the row is not clickable.
+        assert_eq!(rows[0].path, None);
     }
 }

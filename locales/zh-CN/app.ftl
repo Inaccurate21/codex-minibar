@@ -115,6 +115,15 @@ group-tokens-or-cost-by-model = 按模型分组 token 或费用
 
 model = 模型
 
+# src/popup_window/ui/usage.rs
+project = 项目
+
+# src/usage_overview.rs
+unknown-project = 未知项目
+
+# src/popup_window/ui/usage.rs
+no-project-usage = 此期间没有项目数据
+
 tokens = Token
 
 cost = 费用

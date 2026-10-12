@@ -179,6 +179,15 @@ split-by-token-type = Balken nach Token-Typ aufteilen
 model = Modell
 
 # src/popup_window/ui/usage.rs
+project = Projekt
+
+# src/usage_overview.rs
+unknown-project = Unbekanntes Projekt
+
+# src/popup_window/ui/usage.rs
+no-project-usage = Keine Projektdaten in diesem Zeitraum
+
+# src/popup_window/ui/usage.rs
 tokens = Token
 
 # src/popup_window/ui/usage.rs
