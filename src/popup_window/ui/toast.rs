@@ -12,14 +12,15 @@
 use std::{
     cell::RefCell,
     rc::Rc,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
 use gpui::{
     AnyElement, AppContext, AsyncApp, Bounds, ClickEvent, Context, Div, Hsla, InteractiveElement,
-    IntoElement, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Window,
-    WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind, WindowOptions, div, point,
-    prelude::FluentBuilder as _, px, relative, size,
+    IntoElement, ParentElement, Render, SharedString, StatefulInteractiveElement, Styled,
+    StyledImage as _, Window, WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind,
+    WindowOptions, div, point, prelude::FluentBuilder as _, px, relative, size,
 };
 
 use crate::{
@@ -81,6 +82,9 @@ const SWEEP_WIDTH: f32 = 0.35;
 const SUMMARY_MAX_HEIGHT: f32 = 360.0;
 /// Release summaries use the card's full inner width.
 const SUMMARY_WIDTH: f32 = CARD_WIDTH - BORDER * 2.0 - PADDING * 2.0 - INSET;
+/// A summary's first image spans the top of the card, edge to edge.
+const HERO_WIDTH: f32 = CARD_WIDTH - BORDER * 2.0;
+const HERO_HEIGHT: f32 = 250.0;
 
 thread_local! {
     static HOST: RefCell<Option<WindowHandle<ToastHost>>> = const { RefCell::new(None) };
@@ -92,6 +96,9 @@ struct Card {
     height: f32,
     /// Height of the release summary's scroll area, when it has one.
     summary_height: f32,
+    /// The summary's first image, cropped for the top of the card, and the
+    /// index of the block it came from.
+    hero: Option<(usize, Arc<gpui::RenderImage>)>,
     born: Instant,
     /// Lifetime used so far; it does not grow while hovered.
     shown: Duration,
@@ -288,11 +295,15 @@ impl ToastHost {
     fn measure(
         &self,
         notification: &Notification,
+        hero: Option<usize>,
         window: &Window,
         palette: &Palette,
     ) -> (f32, f32) {
         let mut summary_height = 0.0;
         let mut height = BORDER * 2.0 + PADDING * 2.0 + LINE;
+        if hero.is_some() {
+            height += HERO_HEIGHT;
+        }
         let alert = notification.limits.as_deref();
         if alert.is_none() && !notification.body.trim().is_empty() {
             let width =
@@ -301,8 +312,13 @@ impl ToastHost {
             height += BODY_GAP + lines as f32 * LINE;
         }
         if let Some(summary) = notification.summary.as_deref() {
-            let natural =
-                super::toast_summary::measure(window, summary, SUMMARY_WIDTH, &palette.font_family);
+            let natural = super::toast_summary::measure(
+                window,
+                summary,
+                SUMMARY_WIDTH,
+                &palette.font_family,
+                hero,
+            );
             summary_height = natural.min(SUMMARY_MAX_HEIGHT);
             height += SECTION_GAP + summary_height;
         }
@@ -328,7 +344,16 @@ impl ToastHost {
         cx: &mut Context<Self>,
     ) -> bool {
         let palette = self.palette(window, cx);
-        let (height, summary_height) = self.measure(&notification, window, &palette);
+        let hero = notification
+            .summary
+            .as_deref()
+            .and_then(|summary| super::toast_summary::hero(summary, HERO_WIDTH, HERO_HEIGHT));
+        let (height, summary_height) = self.measure(
+            &notification,
+            hero.as_ref().map(|(index, _)| *index),
+            window,
+            &palette,
+        );
         let now = Instant::now();
         if let Some(key) = notification.key {
             let finished = notification.progress.is_none();
@@ -351,6 +376,7 @@ impl ToastHost {
                 card.notification = notification;
                 card.height = height;
                 card.summary_height = summary_height;
+                card.hero = hero;
                 cx.notify();
                 return false;
             }
@@ -377,6 +403,7 @@ impl ToastHost {
             notification,
             height,
             summary_height,
+            hero,
             born: now,
             shown: Duration::ZERO,
             last_tick: now,
@@ -763,6 +790,10 @@ impl ToastHost {
             .flex()
             .items_center()
             .justify_center()
+            // Stays legible over the summary's image.
+            .when(card.hero.is_some(), |close| {
+                close.bg(palette.solid_background.opacity(0.85))
+            })
             .hover(|style| style.bg(palette.subtle_fill))
             .child(components::icon(
                 "fluent-dismiss",
@@ -776,7 +807,25 @@ impl ToastHost {
                 this.dismiss(id, cx);
             }));
 
-        let mut content = div().flex().flex_col().child(
+        let radius = crate::popup::corner_radius_dip() as f32;
+        let hero = card.hero.as_ref().map(|(_, image)| {
+            // Out through the padding to the border, and back in below.
+            div()
+                .mt(px(-PADDING))
+                .mx(px(-PADDING))
+                .mb(px(PADDING))
+                .w(px(HERO_WIDTH))
+                .h(px(HERO_HEIGHT))
+                .flex_none()
+                .opacity(frame.summary)
+                .child(
+                    gpui::img(Arc::clone(image))
+                        .size_full()
+                        .object_fit(gpui::ObjectFit::Fill)
+                        .rounded_t(px((radius - BORDER).max(0.0))),
+                )
+        });
+        let mut content = div().flex().flex_col().children(hero).child(
             div()
                 .flex()
                 .flex_row()
@@ -801,7 +850,8 @@ impl ToastHost {
             ));
         }
         if let Some(summary) = summary {
-            let column = super::toast_summary::render(id, summary, SUMMARY_WIDTH, palette);
+            let skip = card.hero.as_ref().map(|(index, _)| *index);
+            let column = super::toast_summary::render(id, summary, SUMMARY_WIDTH, skip, palette);
             // Fixed at its measured height; a taller summary scrolls.
             content = content.child(
                 div()

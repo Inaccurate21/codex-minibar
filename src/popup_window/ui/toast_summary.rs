@@ -8,8 +8,8 @@ use std::sync::Arc;
 
 use gpui::{
     AnyElement, App, Div, FontStyle, FontWeight, HighlightStyle, InteractiveText, IntoElement,
-    ObjectFit, ParentElement, SharedString, StrikethroughStyle, Styled, StyledImage, StyledText,
-    UnderlineStyle, Window, div, img, px,
+    ObjectFit, ParentElement, RenderImage, SharedString, StrikethroughStyle, Styled, StyledImage,
+    StyledText, UnderlineStyle, Window, div, img, px,
 };
 
 use crate::whats_new::{Block, Content, Inline, Marker, SpanStyle};
@@ -139,16 +139,58 @@ fn block_height(
     })
 }
 
-/// Natural height of the whole summary at `width`.
+/// The summary's first image, center-cropped to `width` x `height` so it can
+/// fill the top of the card edge to edge. Returns its block index, which
+/// [`measure`] and [`render`] then skip.
+pub(super) fn hero(
+    content: &Content,
+    width: f32,
+    height: f32,
+) -> Option<(usize, Arc<RenderImage>)> {
+    let (index, image) = content
+        .blocks
+        .iter()
+        .enumerate()
+        .find_map(|(index, block)| {
+            let Block::Image { src, .. } = block else {
+                return None;
+            };
+            content.images.get(src).map(|image| (index, image))
+        })?;
+    Some((index, Arc::new(crop_to_ratio(image, width / height)?)))
+}
+
+/// The centered part of `image` with the aspect ratio `ratio`.
+fn crop_to_ratio(image: &RenderImage, ratio: f32) -> Option<RenderImage> {
+    let size = image.size(0);
+    let (w, h) = (size.width.0 as u32, size.height.0 as u32);
+    let buffer = image::RgbaImage::from_raw(w, h, image.as_bytes(0)?.to_vec())?;
+    let (cw, ch) = if w as f32 / h as f32 > ratio {
+        (((h as f32 * ratio).round() as u32).clamp(1, w), h)
+    } else {
+        (w, ((w as f32 / ratio).round() as u32).clamp(1, h))
+    };
+    // Pixels stay BGRA, as GPUI expects; cropping does not care.
+    let cropped = image::imageops::crop_imm(&buffer, (w - cw) / 2, (h - ch) / 2, cw, ch).to_image();
+    Some(RenderImage::new(smallvec::smallvec![image::Frame::new(
+        cropped
+    )]))
+}
+
+/// Natural height of the summary at `width`, without the `skip` block.
 pub(super) fn measure(
     window: &Window,
     content: &Content,
     width: f32,
     family: &SharedString,
+    skip: Option<usize>,
 ) -> f32 {
     let mut height = 0.0;
     let mut first = true;
-    for block in &content.blocks {
+    for (index, block) in content.blocks.iter().enumerate() {
+        if Some(index) == skip {
+            continue;
+        }
         let Some(block_height) = block_height(window, content, block, width, family) else {
             continue;
         };
@@ -291,8 +333,15 @@ fn render_block(
     })
 }
 
-/// The summary at `width`, laid out to match [`measure`].
-pub(super) fn render(card: u64, content: &Content, width: f32, palette: &Palette) -> Div {
+/// The summary at `width`, without the `skip` block, laid out to match
+/// [`measure`].
+pub(super) fn render(
+    card: u64,
+    content: &Content,
+    width: f32,
+    skip: Option<usize>,
+    palette: &Palette,
+) -> Div {
     let mut column = div()
         .w(px(width))
         .flex()
@@ -302,6 +351,9 @@ pub(super) fn render(card: u64, content: &Content, width: f32, palette: &Palette
         .text_color(palette.text_primary);
     let mut first = true;
     for (index, block) in content.blocks.iter().enumerate() {
+        if Some(index) == skip {
+            continue;
+        }
         let Some(element) = render_block(card, index, content, block, width, palette) else {
             continue;
         };
@@ -316,4 +368,28 @@ pub(super) fn render(card: u64, content: &Content, width: f32, palette: &Palette
         column = column.child(element.mt(px(gap)).flex_none());
     }
     column
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn image(width: u32, height: u32) -> RenderImage {
+        let buffer =
+            image::RgbaImage::from_fn(width, height, |x, _| image::Rgba([x as u8, 0, 0, 255]));
+        RenderImage::new(smallvec::smallvec![image::Frame::new(buffer)])
+    }
+
+    #[test]
+    fn hero_crop_keeps_the_center() {
+        let wide = crop_to_ratio(&image(8, 2), 1.0).unwrap();
+        assert_eq!(wide.size(0).width.0, 2);
+        assert_eq!(wide.size(0).height.0, 2);
+        // Columns 3 and 4 of 0..8 are the middle pair.
+        assert_eq!(wide.as_bytes(0).unwrap()[0], 3);
+
+        let tall = crop_to_ratio(&image(4, 8), 2.0).unwrap();
+        assert_eq!(tall.size(0).width.0, 4);
+        assert_eq!(tall.size(0).height.0, 2);
+    }
 }
