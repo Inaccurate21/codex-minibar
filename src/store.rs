@@ -221,6 +221,28 @@ impl ProviderStore {
                 cache_savings_microusd INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY (provider, path, date, model)
             );
+            CREATE TABLE IF NOT EXISTS usage_source_cwd (
+                provider TEXT NOT NULL,
+                path TEXT NOT NULL,
+                session TEXT NOT NULL,
+                cwd TEXT NOT NULL,
+                PRIMARY KEY (provider, path)
+            );
+            CREATE INDEX IF NOT EXISTS usage_source_cwd_session
+                ON usage_source_cwd(provider, session);
+            CREATE TABLE IF NOT EXISTS usage_project_daily (
+                provider TEXT NOT NULL,
+                date TEXT NOT NULL,
+                project TEXT NOT NULL,
+                input_tokens INTEGER NOT NULL,
+                cached_input_tokens INTEGER NOT NULL,
+                output_tokens INTEGER NOT NULL,
+                requests INTEGER NOT NULL,
+                estimated_cost_microusd INTEGER NOT NULL,
+                priced_requests INTEGER NOT NULL,
+                cache_savings_microusd INTEGER NOT NULL DEFAULT 0,
+                PRIMARY KEY (provider, date, project)
+            );
             ",
         )?;
         self.migrate_hourly_to_utc()?;
@@ -327,8 +349,10 @@ impl ProviderStore {
             "usage_daily",
             "usage_hourly",
             "usage_model_daily",
+            "usage_project_daily",
             "usage_file_daily",
             "usage_file_model_daily",
+            "usage_source_cwd",
             "usage_events",
             "scan_files",
             "provider_meta",
@@ -511,8 +535,10 @@ impl ProviderStore {
             "usage_daily",
             "usage_hourly",
             "usage_model_daily",
+            "usage_project_daily",
             "usage_file_daily",
             "usage_file_model_daily",
+            "usage_source_cwd",
             "usage_events",
             "scan_files",
             "codex_events",
@@ -900,11 +926,20 @@ impl ProviderStore {
                         suppressing_fork_copies: meta.suppressing_fork_copies,
                         fork_copy_anchor_ms: meta.fork_copy_anchor_ms,
                         session_id: meta.session_id,
+                        cwd: None,
+                        cwd_persisted: false,
                         persisted: true,
                     },
                 );
             }
         }
+        self.load_source_cwd(provider, |path, session, cwd| {
+            if let Some(file) = files.get_mut(path) {
+                // A row from another session predates a rebuild; rewrite it.
+                file.cwd_persisted = session == codex_session_key(path, &file.session_id);
+                file.cwd = Some(cwd);
+            }
+        })?;
         {
             let mut statement = self.conn.prepare(
                 "SELECT path, date, input_tokens, cached_input_tokens, output_tokens,
@@ -1059,6 +1094,20 @@ impl ProviderStore {
                 self.checkpoint_wal()?;
             }
         }
+        self.save_source_cwd(
+            provider,
+            cache
+                .files
+                .iter()
+                .filter(|(_, file)| !file.cwd_persisted)
+                .filter_map(|(path, file)| {
+                    Some((
+                        path.as_str(),
+                        codex_session_key(path, &file.session_id),
+                        file.cwd.as_deref()?,
+                    ))
+                }),
+        )?;
 
         let flags = json!({
             "cache_version": cache.version,
@@ -1147,6 +1196,8 @@ impl ProviderStore {
                         offset,
                         entries: Vec::new(),
                         persisted: None,
+                        cwd: None,
+                        cwd_persisted: false,
                     },
                 );
             }
@@ -1203,6 +1254,12 @@ impl ProviderStore {
                 }
             }
         }
+        self.load_source_cwd(provider, |path, _, cwd| {
+            if let Some(file) = files.get_mut(path) {
+                file.cwd = Some(cwd);
+                file.cwd_persisted = true;
+            }
+        })?;
         // Only files with a stored scan row are trusted to match the DB;
         // anything else (orphan events) is rewritten in full on the next save.
         for (path, file) in &mut files {
@@ -1311,6 +1368,16 @@ impl ProviderStore {
                 self.checkpoint_wal()?;
             }
         }
+        self.save_source_cwd(
+            provider,
+            cache
+                .files
+                .iter()
+                .filter(|(_, file)| !file.cwd_persisted)
+                .filter_map(|(path, file)| {
+                    Some((path.as_str(), path.clone(), file.cwd.as_deref()?))
+                }),
+        )?;
 
         let flags = json!({ "cache_version": cache.version });
         self.upsert_provider_meta(
@@ -1607,14 +1674,45 @@ impl ProviderStore {
         provider: ProviderId,
         rows: &[(String, NaiveDate, TokenUsage)],
     ) -> Result<()> {
+        self.replace_keyed_daily_in_transaction("usage_model_daily", "model", provider, rows)
+    }
+
+    pub(crate) fn replace_usage_project_daily(
+        &self,
+        provider: ProviderId,
+        rows: &[(String, NaiveDate, TokenUsage)],
+    ) -> Result<()> {
+        let tx = self.conn.unchecked_transaction()?;
+        self.replace_usage_project_daily_in_transaction(provider, rows)?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub(crate) fn replace_usage_project_daily_in_transaction(
+        &self,
+        provider: ProviderId,
+        rows: &[(String, NaiveDate, TokenUsage)],
+    ) -> Result<()> {
+        self.replace_keyed_daily_in_transaction("usage_project_daily", "project", provider, rows)
+    }
+
+    /// Replaces a provider's `(date, key)` rollup in `table`, whose key column
+    /// is `column`. Unchanged rows are left untouched.
+    fn replace_keyed_daily_in_transaction(
+        &self,
+        table: &str,
+        column: &str,
+        provider: ProviderId,
+        rows: &[(String, NaiveDate, TokenUsage)],
+    ) -> Result<()> {
         let mut retained = BTreeSet::new();
         {
-            let mut insert = self.conn.prepare(
-                "INSERT INTO usage_model_daily(
-                    provider, date, model, input_tokens, cached_input_tokens, output_tokens,
+            let mut insert = self.conn.prepare(&format!(
+                "INSERT INTO {table}(
+                    provider, date, {column}, input_tokens, cached_input_tokens, output_tokens,
                     requests, estimated_cost_microusd, priced_requests, cache_savings_microusd
                  ) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
-                 ON CONFLICT(provider, date, model) DO UPDATE SET
+                 ON CONFLICT(provider, date, {column}) DO UPDATE SET
                     input_tokens=excluded.input_tokens,
                     cached_input_tokens=excluded.cached_input_tokens,
                     output_tokens=excluded.output_tokens,
@@ -1628,14 +1726,14 @@ impl ProviderStore {
                     OR requests IS NOT excluded.requests
                     OR estimated_cost_microusd IS NOT excluded.estimated_cost_microusd
                     OR priced_requests IS NOT excluded.priced_requests
-                    OR cache_savings_microusd IS NOT excluded.cache_savings_microusd",
-            )?;
-            for (model, date, usage) in rows {
-                retained.insert((date.to_string(), model.clone()));
+                    OR cache_savings_microusd IS NOT excluded.cache_savings_microusd"
+            ))?;
+            for (key, date, usage) in rows {
+                retained.insert((date.to_string(), key.clone()));
                 insert.execute(params![
                     provider.id(),
                     date.to_string(),
-                    model,
+                    key,
                     usage.input_tokens as i64,
                     usage.cached_input_tokens as i64,
                     usage.output_tokens as i64,
@@ -1647,30 +1745,146 @@ impl ProviderStore {
             }
         }
         self.conn.execute_batch(
-            "CREATE TEMP TABLE IF NOT EXISTS retained_model_daily(
-                date TEXT NOT NULL, model TEXT NOT NULL, PRIMARY KEY (date, model)
+            "CREATE TEMP TABLE IF NOT EXISTS retained_keyed_daily(
+                date TEXT NOT NULL, key TEXT NOT NULL, PRIMARY KEY (date, key)
              );
-             DELETE FROM retained_model_daily;",
+             DELETE FROM retained_keyed_daily;",
         )?;
         {
             let mut keep = self.conn.prepare(
-                "INSERT OR IGNORE INTO temp.retained_model_daily(date, model) VALUES(?1, ?2)",
+                "INSERT OR IGNORE INTO temp.retained_keyed_daily(date, key) VALUES(?1, ?2)",
             )?;
-            for (date, model) in &retained {
-                keep.execute(params![date, model])?;
+            for (date, key) in &retained {
+                keep.execute(params![date, key])?;
             }
         }
         self.conn.execute(
-            "DELETE FROM usage_model_daily
-             WHERE provider = ?1 AND NOT EXISTS (
-                SELECT 1 FROM temp.retained_model_daily r
-                WHERE r.date = usage_model_daily.date AND r.model = usage_model_daily.model
-             )",
+            &format!(
+                "DELETE FROM {table}
+                 WHERE provider = ?1 AND NOT EXISTS (
+                    SELECT 1 FROM temp.retained_keyed_daily r
+                    WHERE r.date = {table}.date AND r.key = {table}.{column}
+                 )"
+            ),
             params![provider.id()],
         )?;
         self.conn
-            .execute("DELETE FROM temp.retained_model_daily", [])?;
+            .execute("DELETE FROM temp.retained_keyed_daily", [])?;
         Ok(())
+    }
+
+    /// Calls `apply(path, session, cwd)` for every stored log `cwd` of `provider`.
+    fn load_source_cwd(
+        &self,
+        provider: ProviderId,
+        mut apply: impl FnMut(&str, String, String),
+    ) -> Result<()> {
+        let mut statement = self
+            .conn
+            .prepare("SELECT path, session, cwd FROM usage_source_cwd WHERE provider = ?1")?;
+        let rows = statement.query_map(params![provider.id()], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?;
+        for row in rows {
+            let (path, session, cwd) = row?;
+            apply(&path, session, cwd);
+        }
+        Ok(())
+    }
+
+    /// Upserts `(path, session, cwd)` rows. Only logs whose `cwd` changed are
+    /// passed in, so an idle refresh writes nothing.
+    fn save_source_cwd<'a>(
+        &self,
+        provider: ProviderId,
+        rows: impl Iterator<Item = (&'a str, String, &'a str)>,
+    ) -> Result<()> {
+        let mut rows = rows.peekable();
+        if rows.peek().is_none() {
+            return Ok(());
+        }
+        let tx = self.conn.unchecked_transaction()?;
+        {
+            let mut upsert = tx.prepare(
+                "INSERT INTO usage_source_cwd(provider, path, session, cwd)
+                 VALUES(?1, ?2, ?3, ?4)
+                 ON CONFLICT(provider, path) DO UPDATE SET
+                    session=excluded.session,
+                    cwd=excluded.cwd",
+            )?;
+            for (path, session, cwd) in rows {
+                upsert.execute(params![provider.id(), path, session, cwd])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// True while a scanned Claude log has no stored `cwd`, or logged usage
+    /// has no project rollup yet. The next refresh must then skip the
+    /// unchanged-logs shortcut, which would never fill them in.
+    pub(crate) fn claude_projects_missing(&self, provider: ProviderId) -> Result<bool> {
+        Ok(self.conn.query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM scan_files s
+                WHERE s.provider = ?1 AND NOT EXISTS (
+                    SELECT 1 FROM usage_source_cwd c
+                    WHERE c.provider = s.provider AND c.path = s.path
+                )
+             ) OR (
+                EXISTS(SELECT 1 FROM usage_events WHERE provider = ?1)
+                AND NOT EXISTS(SELECT 1 FROM usage_project_daily WHERE provider = ?1)
+             )",
+            params![provider.id()],
+            |row| row.get(0),
+        )?)
+    }
+
+    /// Usage per project working directory in `[start, end]`. An empty `cwd`
+    /// collects usage whose project is unknown. Only transcript-scanned
+    /// providers (Codex, Claude) record projects; others return nothing.
+    pub fn load_project_breakdown(
+        &self,
+        provider: ProviderId,
+        start: NaiveDate,
+        end: NaiveDate,
+    ) -> Result<Vec<(String, TokenUsage)>> {
+        let sql = match provider.kind() {
+            ProviderKind::Claude => {
+                "SELECT project, SUM(input_tokens), SUM(cached_input_tokens),
+                        SUM(output_tokens), SUM(requests), SUM(estimated_cost_microusd),
+                        SUM(priced_requests), SUM(cache_savings_microusd)
+                 FROM usage_project_daily
+                 WHERE provider = ?1 AND date >= ?2 AND date <= ?3
+                 GROUP BY project"
+            }
+            ProviderKind::Codex => {
+                if provider.is_primary()
+                    && let Some(account) = self.codex_account_for_reads()?
+                {
+                    return self.account_projects_for(&account, start, end);
+                }
+                "SELECT COALESCE(c.cwd, '') AS project, SUM(f.input_tokens),
+                        SUM(f.cached_input_tokens), SUM(f.output_tokens), SUM(f.requests),
+                        SUM(f.estimated_cost_microusd), SUM(f.priced_requests),
+                        SUM(f.cache_savings_microusd)
+                 FROM usage_file_daily f
+                 LEFT JOIN usage_source_cwd c ON c.provider = f.provider AND c.path = f.path
+                 WHERE f.provider = ?1 AND f.date >= ?2 AND f.date <= ?3
+                 GROUP BY project"
+            }
+            _ => return Ok(Vec::new()),
+        };
+        let mut statement = self.conn.prepare(sql)?;
+        let rows = statement.query_map(
+            params![provider.id(), start.to_string(), end.to_string()],
+            |row| Ok((row.get::<_, String>(0)?, token_usage_from_row(row, 1)?)),
+        )?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
     }
 
     /// Imports the previous JSON caches once so upgrading does not force a
@@ -1812,7 +2026,12 @@ fn delete_stale_file_rows(
     stale: &[String],
 ) -> Result<()> {
     let provider = provider.id();
-    for table in ["scan_files", "usage_file_daily", "usage_file_model_daily"] {
+    for table in [
+        "scan_files",
+        "usage_file_daily",
+        "usage_file_model_daily",
+        "usage_source_cwd",
+    ] {
         let mut delete = tx.prepare(&format!(
             "DELETE FROM {table} WHERE provider = ?1 AND path = ?2"
         ))?;
@@ -1831,7 +2050,7 @@ fn delete_stale_event_rows(
     stale: &[String],
 ) -> Result<()> {
     let provider = provider.id();
-    for table in ["scan_files", "usage_events"] {
+    for table in ["scan_files", "usage_events", "usage_source_cwd"] {
         let mut delete = tx.prepare(&format!(
             "DELETE FROM {table} WHERE provider = ?1 AND path = ?2"
         ))?;
@@ -1857,6 +2076,16 @@ struct CodexFileMeta {
     fork_copy_anchor_ms: i64,
     #[serde(default)]
     session_id: String,
+}
+
+/// Session name a Codex log's account events are stored under: the rollout's
+/// session id, or the log path when it never named one.
+fn codex_session_key(path: &str, session_id: &str) -> String {
+    if session_id.is_empty() {
+        path.to_owned()
+    } else {
+        session_id.to_owned()
+    }
 }
 
 fn aggregate_codex_daily(cache: &UsageCache, history_days: u16) -> Vec<DailyTokenUsage> {
@@ -2541,6 +2770,7 @@ mod tests {
                     offset: 10,
                     entries: vec![entry("m1"), entry("m2")],
                     persisted: None,
+                    ..Default::default()
                 },
             )]),
         };
@@ -2628,6 +2858,7 @@ mod tests {
             offset: 10,
             entries,
             persisted: None,
+            ..Default::default()
         };
         let cache = ClaudeUsageCache {
             version: CLAUDE_CACHE_VERSION,
@@ -2715,6 +2946,7 @@ mod tests {
                         model: Some("claude-sonnet-4-20250514".into()),
                     }],
                     persisted: None,
+                    ..Default::default()
                 },
             )]),
         };
@@ -2760,5 +2992,75 @@ mod tests {
         assert_eq!(models.len(), 1);
         assert_eq!(models[0].0, "gpt-5");
         assert_eq!(models[0].1.total_tokens(), 15);
+    }
+
+    #[test]
+    fn codex_project_breakdown_joins_stored_log_cwd() {
+        let dir = tempdir().unwrap();
+        let store = test_store(&dir.path().join("test.sqlite"));
+        let codex = id(ProviderKind::Codex);
+        let mut cache = sample_codex_cache();
+        let file = cache.files.get_mut("sessions/sample.jsonl").unwrap();
+        file.cwd = Some("/work/app".into());
+        store.save_codex_cache(codex, &cache).unwrap();
+
+        let loaded = store.load_codex_cache(codex).unwrap();
+        let file = loaded.files.get("sessions/sample.jsonl").unwrap();
+        assert_eq!(file.cwd.as_deref(), Some("/work/app"));
+        assert!(file.cwd_persisted);
+
+        let today = Local::now().date_naive();
+        let projects = store.load_project_breakdown(codex, today, today).unwrap();
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].0, "/work/app");
+        assert_eq!(projects[0].1.total_tokens(), 15);
+
+        // A log that left the cache takes its cwd row with it.
+        store
+            .save_codex_cache(codex, &UsageCache::default())
+            .unwrap();
+        let rows: i64 = store
+            .conn
+            .query_row("SELECT COUNT(*) FROM usage_source_cwd", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(rows, 0);
+    }
+
+    #[test]
+    fn claude_project_rollup_round_trips_and_clears_missing_flag() {
+        let dir = tempdir().unwrap();
+        let store = test_store(&dir.path().join("test.sqlite"));
+        let claude = id(ProviderKind::Claude);
+        let today = Local::now().date_naive();
+        let usage = TokenUsage {
+            input_tokens: 7,
+            output_tokens: 3,
+            requests: 1,
+            ..Default::default()
+        };
+        let cache = ClaudeUsageCache {
+            version: CLAUDE_CACHE_VERSION,
+            files: BTreeMap::from([(
+                "/home/me/.claude/projects/-work-app/s.jsonl".into(),
+                CachedClaudeSessionFile {
+                    offset: 10,
+                    cwd: Some("/work/app".into()),
+                    ..Default::default()
+                },
+            )]),
+        };
+        store.save_claude_cache(claude, &cache).unwrap();
+        assert!(!store.claude_projects_missing(claude).unwrap());
+        store
+            .replace_usage_project_daily(claude, &[("/work/app".into(), today, usage.clone())])
+            .unwrap();
+        let projects = store.load_project_breakdown(claude, today, today).unwrap();
+        assert_eq!(projects, vec![("/work/app".to_owned(), usage)]);
+        assert!(
+            store
+                .load_project_breakdown(id(ProviderKind::Cursor), today, today)
+                .unwrap()
+                .is_empty()
+        );
     }
 }

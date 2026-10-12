@@ -115,6 +115,15 @@ group-tokens-or-cost-by-model = Agrupar tokens o coste por modelo
 
 model = Modelo
 
+# src/popup_window/ui/usage.rs
+project = Proyecto
+
+# src/usage_overview.rs
+unknown-project = Proyecto desconocido
+
+# src/popup_window/ui/usage.rs
+no-project-usage = No hay datos de proyectos en este periodo
+
 tokens = Tokens
 
 cost = Coste

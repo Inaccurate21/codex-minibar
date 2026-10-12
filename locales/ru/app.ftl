@@ -173,6 +173,15 @@ group-tokens-or-cost-by-model = Группировать токены или р�
 model = Модель
 
 # src/popup_window/ui/usage.rs
+project = Проект
+
+# src/usage_overview.rs
+unknown-project = Неизвестный проект
+
+# src/popup_window/ui/usage.rs
+no-project-usage = Нет данных по проектам за этот период
+
+# src/popup_window/ui/usage.rs
 tokens = Токены
 
 # src/popup_window/ui/usage.rs

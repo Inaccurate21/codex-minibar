@@ -884,6 +884,30 @@ impl ProviderStore {
         .collect()
     }
 
+    /// Per-project usage of `account`, keyed by the session's stored `cwd`.
+    /// Legacy snapshot rows predate session tracking and count as unknown.
+    pub(crate) fn account_projects_for(
+        &self,
+        account: &str,
+        start: NaiveDate,
+        end: NaiveDate,
+    ) -> Result<Vec<(String, TokenUsage)>> {
+        let codex = ProviderId::primary(ProviderKind::Codex);
+        // Sum per session first so the cwd lookup runs once per session.
+        let per_session = "SUM(input_tokens) AS input_tokens,SUM(cached_input_tokens) AS cached_input_tokens,SUM(output_tokens) AS output_tokens,SUM(requests) AS requests,SUM(estimated_cost_microusd) AS estimated_cost_microusd,SUM(priced_requests) AS priced_requests,SUM(cache_savings_microusd) AS cache_savings_microusd";
+        let mut stmt = self.conn.prepare(&format!("SELECT project,{SUMS} FROM (
+            SELECT COALESCE((SELECT c.cwd FROM usage_source_cwd c WHERE c.provider=?4 AND c.session=n.name ORDER BY c.cwd='' LIMIT 1),'') AS project,{VALUES} FROM (
+                SELECT session,{per_session} FROM codex_events WHERE account=(SELECT id FROM codex_names WHERE name=?1) AND date>=?2 AND date<=?3 AND covered=0 GROUP BY session
+            ) s JOIN codex_names n ON n.id=s.session
+            UNION ALL SELECT '' AS project,{VALUES} FROM codex_legacy_daily WHERE account=?1 AND date>=?2 AND date<=?3
+            ) GROUP BY project"))?;
+        let rows = stmt.query_map(
+            params![account, start.to_string(), end.to_string(), codex.id()],
+            |r| Ok((r.get::<_, String>(0)?, token_usage_from_row(r, 1)?)),
+        )?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
     pub(crate) fn account_hourly_for(
         &self,
         account: &str,
@@ -1640,6 +1664,33 @@ mod tests {
                 .unwrap(),
             3
         );
+    }
+    #[test]
+    fn account_projects_follow_the_session_cwd() {
+        let db = store();
+        let s = state();
+        let new = identity_for("new", 1);
+        let mut other = event(116, 5);
+        other.session = "other-conversation".into();
+        db.save_account_events(&[event(115, 10), other], &s, &new, &new, at(120))
+            .unwrap();
+        db.conn
+            .execute(
+                "INSERT INTO usage_source_cwd(provider, path, session, cwd)
+                 VALUES('codex', 'sessions/a.jsonl', 'same-conversation', '/work/app'),
+                       ('codex', 'archived_sessions/a.jsonl', 'same-conversation', '')",
+                [],
+            )
+            .unwrap();
+        let mut rows = db
+            .account_projects_for("new", at(0).date_naive(), at(200).date_naive())
+            .unwrap();
+        rows.sort_by(|a, b| a.0.cmp(&b.0));
+        let rows = rows
+            .into_iter()
+            .map(|(project, usage)| (project, usage.input_tokens))
+            .collect::<Vec<_>>();
+        assert_eq!(rows, vec![(String::new(), 5), ("/work/app".into(), 10)]);
     }
     #[test]
     fn failed_commit_keeps_events_and_checkpoint_atomic() {

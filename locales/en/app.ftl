@@ -179,6 +179,15 @@ split-by-token-type = Split bars by token type
 model = Model
 
 # src/popup_window/ui/usage.rs
+project = Project
+
+# src/usage_overview.rs
+unknown-project = Unknown project
+
+# src/popup_window/ui/usage.rs
+no-project-usage = No project data in this period
+
+# src/popup_window/ui/usage.rs
 tokens = Tokens
 
 # src/popup_window/ui/usage.rs
