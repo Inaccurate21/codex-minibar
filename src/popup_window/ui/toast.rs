@@ -85,6 +85,14 @@ const SUMMARY_WIDTH: f32 = CARD_WIDTH - BORDER * 2.0 - PADDING * 2.0 - INSET;
 /// A summary's first image spans the top of the card, edge to edge.
 const HERO_WIDTH: f32 = CARD_WIDTH - BORDER * 2.0;
 const HERO_HEIGHT: f32 = 250.0;
+/// Travel before a press becomes a swipe instead of a click.
+const SWIPE_SLOP: f32 = 6.0;
+/// A swipe this far right, or released moving right this fast (px/ms),
+/// closes the card.
+const SWIPE_DISMISS: f32 = CARD_WIDTH * 0.3;
+const SWIPE_FLING: f32 = 0.6;
+/// Leftward drags only give a little: cards leave to the right.
+const SWIPE_LEFT_RESISTANCE: f32 = 0.2;
 
 thread_local! {
     static HOST: RefCell<Option<WindowHandle<ToastHost>>> = const { RefCell::new(None) };
@@ -104,6 +112,12 @@ struct Card {
     shown: Duration,
     last_tick: Instant,
     hovered: bool,
+    /// The pointer (mouse, pen or touch) holding the card for a swipe.
+    drag: Option<Drag>,
+    /// Horizontal offset the card rests at: 0, or where a swipe let go.
+    swiped: f32,
+    /// The last press became a swipe; its click must not close the card.
+    swallow_click: bool,
     /// Kept until closed by hand, e.g. after opening the release notes.
     pinned: bool,
     leaving: Option<Instant>,
@@ -143,6 +157,19 @@ pub(crate) struct ToastHost {
     hwnd: Option<windows_sys::Win32::Foundation::HWND>,
     #[cfg(windows)]
     last_region: Vec<super::win32::Rect>,
+}
+
+#[derive(Clone, Copy)]
+struct Drag {
+    /// Pointer x when pressed, in host coordinates.
+    start: f32,
+    /// Current offset, after resistance.
+    offset: f32,
+    moved: bool,
+    /// Latest pointer x and when it was seen, for the release speed.
+    last: (f32, Instant),
+    /// Pointer speed in px/ms, positive to the right.
+    velocity: f32,
 }
 
 fn progress(elapsed: Duration, duration: Duration) -> f32 {
@@ -408,6 +435,9 @@ impl ToastHost {
             shown: Duration::ZERO,
             last_tick: now,
             hovered: false,
+            drag: None,
+            swiped: 0.0,
+            swallow_click: false,
             pinned,
             leaving: None,
         });
@@ -459,6 +489,76 @@ impl ToastHost {
         }
     }
 
+    fn begin_drag(&mut self, id: u64, x: f32, cx: &mut Context<Self>) {
+        if let Some(card) = self
+            .cards
+            .iter_mut()
+            .find(|card| card.id == id && card.leaving.is_none())
+        {
+            card.swallow_click = false;
+            card.drag = Some(Drag {
+                start: x,
+                offset: 0.0,
+                moved: false,
+                last: (x, Instant::now()),
+                velocity: 0.0,
+            });
+            cx.notify();
+        }
+    }
+
+    /// Follows the pointer holding a card.
+    fn drag_to(&mut self, x: f32, cx: &mut Context<Self>) {
+        let Some(drag) = self.cards.iter_mut().find_map(|card| card.drag.as_mut()) else {
+            return;
+        };
+        let now = Instant::now();
+        let elapsed = now.saturating_duration_since(drag.last.1).as_secs_f32() * 1000.0;
+        if elapsed > 0.0 {
+            drag.velocity = (x - drag.last.0) / elapsed;
+        }
+        drag.last = (x, now);
+        let delta = x - drag.start;
+        drag.moved |= delta.abs() > SWIPE_SLOP;
+        drag.offset = if delta < 0.0 {
+            delta * SWIPE_LEFT_RESISTANCE
+        } else {
+            delta
+        };
+        cx.notify();
+    }
+
+    /// Lets go of the held card: far or fast enough closes it, otherwise it
+    /// springs back.
+    fn end_drag(&mut self, cx: &mut Context<Self>) {
+        let Some(card) = self.cards.iter_mut().find(|card| card.drag.is_some()) else {
+            return;
+        };
+        let Some(drag) = card.drag.take() else {
+            return;
+        };
+        card.swallow_click = drag.moved;
+        let recent = drag.last.1.elapsed() < Duration::from_millis(80);
+        let fling = recent && drag.velocity > SWIPE_FLING;
+        if drag.moved && (drag.offset > SWIPE_DISMISS || fling) && card.leaving.is_none() {
+            card.swiped = drag.offset.max(0.0);
+            card.leaving = Some(Instant::now());
+        }
+        cx.notify();
+    }
+
+    /// A click closes the card, unless the press was a swipe.
+    fn click(&mut self, id: u64, cx: &mut Context<Self>) {
+        let swiped = self
+            .cards
+            .iter_mut()
+            .find(|card| card.id == id)
+            .is_some_and(|card| std::mem::take(&mut card.swallow_click));
+        if !swiped {
+            self.dismiss(id, cx);
+        }
+    }
+
     fn set_hovered(&mut self, id: u64, hovered: bool, cx: &mut Context<Self>) {
         if let Some(card) = self.cards.iter_mut().find(|card| card.id == id) {
             card.hovered = hovered;
@@ -474,7 +574,8 @@ impl ToastHost {
             let entered = !animate || now.saturating_duration_since(card.born) >= ENTER;
             // A card with progress waits for its operation's result.
             let running = card.notification.progress.is_some();
-            if card.leaving.is_none() && !card.hovered && !card.pinned && !running && entered {
+            let held = card.hovered || card.drag.is_some();
+            if card.leaving.is_none() && !held && !card.pinned && !running && entered {
                 card.shown += delta;
                 if card.shown >= card.notification.lifetime() {
                     card.leaving = Some(now);
@@ -581,8 +682,19 @@ impl Render for ToastHost {
             let enter_eased = fx::ease_out_cubic(enter);
             let exit_eased = fx::ease_out_cubic(exit);
             let slide = (1.0 - enter_eased) * (CARD_WIDTH * 0.3) + exit_eased * (CARD_WIDTH * 0.25);
-            let alpha = (enter * 2.0).min(1.0) * (1.0 - exit_eased);
-            let x = EDGE + slide;
+            // A held card follows the pointer; let go, it springs back or
+            // leaves from where it was swiped to.
+            let drag_key = fx::key(("toast-drag", card.id));
+            let offset = match card.drag {
+                Some(drag) => {
+                    self.fx.snap(drag_key, drag.offset);
+                    drag.offset
+                }
+                None => self.fx.value(drag_key, card.swiped, fx::NORMAL),
+            };
+            let fade = 1.0 - (offset.max(0.0) / CARD_WIDTH).min(1.0) * 0.6;
+            let alpha = (enter * 2.0).min(1.0) * (1.0 - exit_eased) * fade;
+            let x = EDGE + slide + offset;
             #[cfg(windows)]
             if alpha > 0.0 {
                 // Visible part only: the card slides out past the host edge.
@@ -645,12 +757,45 @@ impl Render for ToastHost {
         if animating || self.fx.is_animating() {
             window.request_animation_frame();
         }
+        // The window captures the pointer while it is pressed, so a swipe is
+        // followed even past the card or the host's edge.
+        let host = cx.entity().downgrade();
+        let swipes = gpui::canvas(
+            |_, _, _| {},
+            move |_, _, window, _| {
+                let moves = host.clone();
+                window.on_mouse_event(move |event: &gpui::MouseMoveEvent, phase, _, cx| {
+                    if phase != gpui::DispatchPhase::Capture {
+                        return;
+                    }
+                    let _ = moves.update(cx, |this, cx| {
+                        if event.pressed_button == Some(gpui::MouseButton::Left) {
+                            this.drag_to(f32::from(event.position.x), cx);
+                        } else {
+                            // Released where no up event reached us.
+                            this.end_drag(cx);
+                        }
+                    });
+                });
+                let ups = host.clone();
+                window.on_mouse_event(move |event: &gpui::MouseUpEvent, phase, _, cx| {
+                    if phase == gpui::DispatchPhase::Capture
+                        && event.button == gpui::MouseButton::Left
+                    {
+                        let _ = ups.update(cx, |this, cx| this.end_drag(cx));
+                    }
+                });
+            },
+        )
+        .absolute()
+        .size_full();
         div()
             .size_full()
             .relative()
             .font_family(palette.font_family.clone())
             .text_color(palette.text_primary)
             .children(elements)
+            .child(swipes)
     }
 }
 
@@ -896,13 +1041,15 @@ impl ToastHost {
             .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
                 this.set_hovered(id, *hovered, cx);
             }))
-            // A summary is read, scrolled and clicked through; only its close
-            // button dismisses it.
-            .when(summary.is_none(), |card| {
-                card.on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
-                    this.dismiss(id, cx);
-                }))
-            })
+            .on_mouse_down(
+                gpui::MouseButton::Left,
+                cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
+                    this.begin_drag(id, f32::from(event.position.x), cx);
+                }),
+            )
+            .on_click(cx.listener(move |this, _: &ClickEvent, _, cx| {
+                this.click(id, cx);
+            }))
             // The summary follows the height glide instead of spilling past it.
             .when(summary.is_some(), |card| card.overflow_hidden())
             .child(content)

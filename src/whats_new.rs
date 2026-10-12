@@ -30,13 +30,9 @@ use crate::i18n::Language;
 use crate::notifications::{Notification, NotificationAction, NotificationKind, notify};
 use crate::settings::Settings;
 
-// TEMP: reads from the feature branch for testing; switch back to `main`
-// before merging.
 pub const BASE_URL: &str =
-    "https://raw.githubusercontent.com/vertopolkaLF/codex-minibar/feat/whats-new/data/releases";
+    "https://raw.githubusercontent.com/vertopolkaLF/codex-minibar/main/data/releases";
 const USER_AGENT: &str = "codex-minibar-whats-new";
-/// TEMP: show the summary on every launch, ignoring the seen state.
-const ALWAYS_SHOW: bool = true;
 const STATE_FILE: &str = "whats-new.json";
 const MAX_MARKDOWN_BYTES: u64 = 64 * 1024;
 const MAX_IMAGE_BYTES: u64 = 3 * 1024 * 1024;
@@ -713,13 +709,7 @@ fn run(onboarding_completed: bool, enabled: bool, just_updated: bool) {
         }
     };
     let mut state = load_state(&path);
-    // TEMP: show on every launch for testing; remove before merging.
-    let decision = if ALWAYS_SHOW {
-        Decision::Show
-    } else {
-        decide(state.as_ref(), onboarding_completed, enabled, &current)
-    };
-    match decision {
+    match decide(state.as_ref(), onboarding_completed, enabled, &current) {
         Decision::Done => return,
         Decision::Skip => {
             mark_seen(&version);
@@ -745,7 +735,7 @@ fn run(onboarding_completed: bool, enabled: bool, just_updated: bool) {
         match fetch(&version, crate::i18n::current_language()) {
             Ok(Fetched::Ready(content)) => {
                 mark_seen(&version);
-                if ALWAYS_SHOW || still_enabled() {
+                if still_enabled() {
                     // Later attempts arrive after the update card is gone.
                     notify(notification(content, just_updated && attempt == 0));
                 }
