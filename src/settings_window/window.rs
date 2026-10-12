@@ -63,7 +63,7 @@ pub(crate) struct SettingsWindow {
     pub(super) font_families: Vec<SharedString>,
     pub(super) font_picker: super::appearance::FontPicker,
     backdrop: super::backdrop::Backdrop,
-    focus: FocusHandle,
+    pub(super) focus: FocusHandle,
     // Navigation.
     pub(super) mode: NavMode,
     /// Direction of the pending sidebar swap (+1 into Providers, -1 back);
@@ -101,6 +101,10 @@ pub(crate) struct SettingsWindow {
     pub(super) tray_dialog: Option<super::tray::TrayDialog>,
     pub(super) removed_widget: Option<(usize, TrayWidget)>,
     pub(super) confirm_reset: bool,
+    /// The popup shortcut button is waiting for a key combination.
+    pub(super) hotkey_recording: bool,
+    /// The last combination pressed while recording had no modifier.
+    pub(super) hotkey_rejected: bool,
     /// Dialogs that are open or still playing their exit transition.
     pub(super) overlays: Overlays,
     pub(super) tray_previews: super::tray::PreviewCache,
@@ -142,8 +146,10 @@ impl SettingsWindow {
             super::vscode_themes::end_theme_preview(cx);
             super::appearance::end_font_preview(cx);
             super::window_closed(false);
+            crate::hotkey::set_suspended(false);
             true
         });
+        crate::hotkey::set_suspended(false);
         let focus = cx.focus_handle();
         window.focus(&focus);
         let updates = Arc::clone(&state.updates);
@@ -216,6 +222,8 @@ impl SettingsWindow {
             tray_dialog: None,
             removed_widget: None,
             confirm_reset: false,
+            hotkey_recording: false,
+            hotkey_rejected: false,
             overlays: Overlays::default(),
             tray_previews: Default::default(),
             theme_browser: Default::default(),
@@ -388,6 +396,7 @@ impl SettingsWindow {
             return;
         }
         self.page = page;
+        self.stop_hotkey_recording();
         // A theme preview belongs to the Appearance page it was started on.
         super::vscode_themes::end_theme_preview(cx);
         self.font_picker.cancel_preview();
@@ -528,6 +537,10 @@ impl SettingsWindow {
     // ----- keyboard ------------------------------------------------------------
 
     fn on_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+        if self.record_hotkey(event, cx) {
+            cx.stop_propagation();
+            return;
+        }
         if event.keystroke.key != "escape" {
             return;
         }

@@ -118,6 +118,7 @@ See spending per key and manage OpenRouter API keys from the popup's OpenRouter 
 - Warnings before a Claude login stops renewing.
 - An optional Stream Deck companion with quota keys that open the popup or a provider tab and
   launch Minibar when it is not running.
+- An optional global keyboard shortcut that shows or hides the popup from anywhere.
 - Start with Windows, update in place from GitHub Releases, and keep usage history locally.
 - Automatic Codex discovery with an override for a custom executable path.
 - Settings import and export, and a live software rendering option for systems where GPU

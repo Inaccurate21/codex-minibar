@@ -2667,3 +2667,13 @@ status-stage-in-progress = Läuft
 
 # src/settings_window/notifications.rs
 news-and-status = Neuigkeiten und Status
+
+# src/settings_window/general.rs
+popup-shortcut = Popup-Tastenkürzel
+popup-shortcut-description = Drücken Sie es überall in Windows, um das Popup ein- oder auszublenden.
+shortcut-not-set = Nicht festgelegt
+press-a-shortcut = Tastenkürzel drücken…
+popup-shortcut-recording-hint = Esc bricht ab. Rücktaste entfernt das Tastenkürzel.
+popup-shortcut-needs-modifier = Verwenden Sie Strg, Alt oder Win, oder F13–F24.
+popup-shortcut-in-use = Dieses Tastenkürzel wird bereits von einer anderen App verwendet. Wählen Sie ein anderes.
+clear-shortcut = Tastenkürzel entfernen

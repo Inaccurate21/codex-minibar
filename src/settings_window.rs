@@ -88,6 +88,8 @@ pub(crate) enum Command {
     Sync(Box<Settings>),
     DiscoveredBricks(BTreeMap<String, String>),
     OpenRouter(OpenRouterSettingsSnapshot),
+    /// The popup shortcut's registration status changed.
+    HotkeyStatus,
 }
 
 fn post(command: Command) {
@@ -123,6 +125,13 @@ pub fn open_onboarding() {
 /// navigates settings and changes popup-related options.
 pub(crate) fn is_open() -> bool {
     SETTINGS_OPEN.load(Ordering::SeqCst) || ONBOARDING_OPEN.load(Ordering::SeqCst)
+}
+
+/// Repaint Settings after the popup shortcut was (un)registered.
+pub(crate) fn refresh_hotkey_status() {
+    if SETTINGS_OPEN.load(Ordering::SeqCst) {
+        post(Command::HotkeyStatus);
+    }
 }
 
 /// Push a committed settings snapshot into the open window.
@@ -243,6 +252,7 @@ pub(crate) fn handle(command: Command, state: &Arc<AppState>, cx: &mut AsyncApp)
             root.openrouter = snapshot;
             cx.notify();
         }),
+        Command::HotkeyStatus => with_settings_window(cx, |_, cx| cx.notify()),
     }
 }
 

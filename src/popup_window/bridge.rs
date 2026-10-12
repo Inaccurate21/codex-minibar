@@ -219,6 +219,8 @@ pub(super) fn start_background_bridge(state: Arc<AppState>) {
     thread::spawn(move || {
         let streamdeck_rx = crate::streamdeck::start_server(Arc::clone(&state));
         let mut tray = TrayManager::new();
+        // Registered from this thread so WM_HOTKEY reaches its message pump.
+        let mut hotkey = crate::hotkey::Registration::default();
         let fallback_attempt = state.last_activation_at;
         let mut notification_settings = state.settings.notifications.clone();
         // Keyed by instance id.
@@ -521,6 +523,7 @@ pub(super) fn start_background_bridge(state: Arc<AppState>) {
                     &mut live_settings,
                 );
                 drain_updates(&mut ui, &mut tray, &mut update_phase, &mut widgets);
+                pump_popup_hotkey(&mut hotkey, &live_settings, &mut ui);
                 if pump_tray_and_dismiss(&tray, &settings_tx, &state, &mut ui) {
                     drop(tray);
                     AppState::flush_limits_persistence();
@@ -555,6 +558,7 @@ pub(super) fn start_background_bridge(state: Arc<AppState>) {
                 &mut live_settings,
             );
             drain_updates(&mut ui, &mut tray, &mut update_phase, &mut widgets);
+            pump_popup_hotkey(&mut hotkey, &live_settings, &mut ui);
             if pump_tray_and_dismiss(&tray, &settings_tx, &state, &mut ui) {
                 drop(tray);
                 AppState::flush_limits_persistence();
@@ -901,6 +905,34 @@ pub(super) fn start_background_bridge(state: Arc<AppState>) {
             }
         }
     });
+}
+
+/// Keeps the popup shortcut registered as configured and toggles the popup
+/// when it is pressed, the same way a tray click does.
+fn pump_popup_hotkey(
+    hotkey: &mut crate::hotkey::Registration,
+    settings: &Settings,
+    ui: &mut UiState,
+) {
+    // Settings releases the shortcut while it records a new one; the flag
+    // cannot outlive the window that set it.
+    let recording = crate::hotkey::is_suspended() && crate::settings_window::is_open();
+    if hotkey.sync(settings.popup_hotkey.filter(|_| !recording)) {
+        crate::settings_window::refresh_hotkey_status();
+    }
+    if !crate::hotkey::take_pressed() || recording {
+        return;
+    }
+    if popup::is_visible() && !popup::is_closing() {
+        // Settings uses the popup as a live preview; keep it, as a tray
+        // click does.
+        if !crate::settings_window::is_open() {
+            popup::hide();
+        }
+    } else {
+        flush_popup_ui(ui);
+        popup::show_near_cursor();
+    }
 }
 
 #[cfg(windows)]

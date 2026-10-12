@@ -1831,6 +1831,9 @@ pub struct Settings {
     pub show_account_name: bool,
     /// Shows the Edit Home button in the popup's bottom bar.
     pub show_edit_home_button: bool,
+    /// System-wide shortcut that shows or hides the popup. None leaves every
+    /// key combination to other applications.
+    pub popup_hotkey: Option<crate::hotkey::Hotkey>,
     pub tray_widgets: Vec<TrayWidget>,
     pub notifications: NotificationSettings,
     pub history_retention_days: u16,
@@ -1891,6 +1894,7 @@ impl Default for Settings {
             total_spend_period: TotalSpendPeriod::default(),
             show_account_name: false,
             show_edit_home_button: true,
+            popup_hotkey: None,
             // An empty list intentionally means "show the ordinary app icon".
             tray_widgets: Vec::new(),
             notifications: NotificationSettings::default(),
