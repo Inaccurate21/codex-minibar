@@ -1,0 +1,179 @@
+//! Live widgets drawn inside the Windows taskbar.
+//!
+//! A dedicated thread owns a layered child window parented to Explorer's
+//! `Shell_TrayWnd`, the model FluentFlyout and TrafficMonitor use. Parenting
+//! attaches that thread's input queue to Explorer's, so it never does
+//! anything but draw the strip: it must not share a thread with GPUI, whose
+//! longer frames would freeze the taskbar. The bridge thread publishes
+//! settings and limits here and performs the widgets' actions.
+
+pub(crate) mod model;
+#[cfg(windows)]
+mod host;
+#[cfg(windows)]
+pub(crate) mod render;
+
+use std::sync::{
+    Mutex,
+    atomic::{AtomicU32, Ordering},
+};
+
+use crate::{
+    instances::ProviderId,
+    limits::ProviderLimits,
+    settings::{Settings, TaskbarSettings},
+};
+
+/// Horizontal space between neighboring widgets, in DIPs.
+pub(crate) const WIDGET_GAP: f32 = 4.0;
+
+/// Settings the strip renders from.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Config {
+    pub(crate) taskbar: TaskbarSettings,
+    pub(crate) colored_icons: bool,
+}
+
+impl Config {
+    fn from_settings(settings: &Settings) -> Self {
+        Self {
+            taskbar: settings.taskbar.clone(),
+            colored_icons: settings.use_colored_provider_icons,
+        }
+    }
+}
+
+/// Something the user asked for from a widget; performed by the bridge.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Action {
+    /// Toggle the popup, opened on the widget's provider.
+    Open {
+        provider: Option<ProviderId>,
+        anchor: (i32, i32),
+    },
+    /// Open Settings on the Taskbar page.
+    Settings,
+    /// Turn the widgets off.
+    Hide,
+}
+
+static ACTIONS: Mutex<Vec<Action>> = Mutex::new(Vec::new());
+static BRIDGE_THREAD: AtomicU32 = AtomicU32::new(0);
+
+/// Remembers the thread that drains [`take_actions`] so a click can wake it.
+pub fn register_bridge_thread() {
+    #[cfg(windows)]
+    BRIDGE_THREAD.store(
+        unsafe { windows_sys::Win32::System::Threading::GetCurrentThreadId() },
+        Ordering::SeqCst,
+    );
+}
+
+fn post_action(action: Action) {
+    if let Ok(mut actions) = ACTIONS.lock() {
+        actions.push(action);
+    }
+    #[cfg(windows)]
+    {
+        let thread = BRIDGE_THREAD.load(Ordering::SeqCst);
+        if thread != 0 {
+            unsafe {
+                windows_sys::Win32::UI::WindowsAndMessaging::PostThreadMessageW(
+                    thread,
+                    windows_sys::Win32::UI::WindowsAndMessaging::WM_NULL,
+                    0,
+                    0,
+                );
+            }
+        }
+    }
+}
+
+pub fn take_actions() -> Vec<Action> {
+    ACTIONS
+        .lock()
+        .map(|mut actions| std::mem::take(&mut *actions))
+        .unwrap_or_default()
+}
+
+/// Publishes the latest settings. The host thread starts on the first
+/// publish that enables widgets and lives for the rest of the process.
+pub fn publish_settings(settings: &Settings) {
+    #[cfg(windows)]
+    host::publish(host::Message::Config(Config::from_settings(settings)));
+    #[cfg(not(windows))]
+    let _ = settings;
+}
+
+/// A widget strip rendered for Settings, exactly as the taskbar draws it.
+pub(crate) struct Preview {
+    pub(crate) png: Vec<u8>,
+    /// Size in DIPs.
+    pub(crate) width: f32,
+    pub(crate) height: f32,
+}
+
+/// Renders `widgets` side by side on a transparent strip `height` DIPs tall.
+#[cfg(windows)]
+pub(crate) fn preview(
+    widgets: &[crate::settings::TaskbarWidget],
+    limits: &ProviderLimits,
+    appearance: model::Appearance,
+    scale: f32,
+    height: f32,
+) -> Option<Preview> {
+    use std::cell::RefCell;
+    thread_local! {
+        static RENDERER: RefCell<Option<render::Renderer>> = const { RefCell::new(None) };
+    }
+    let views = widgets
+        .iter()
+        .map(|widget| model::resolve(widget, limits, appearance))
+        .collect::<Vec<_>>();
+    if views.is_empty() {
+        return None;
+    }
+    let metrics = render::Metrics {
+        scale: scale.max(0.5),
+        height,
+    };
+    let snapshot = RENDERER.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        if slot.is_none() {
+            *slot = render::Renderer::new().ok();
+        }
+        render::snapshot(slot.as_mut()?, &views, metrics, appearance, None)
+    })?;
+    let mut png = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut png, snapshot.width, snapshot.height);
+        encoder.set_color(png::ColorType::Rgba);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().ok()?;
+        writer.write_image_data(&snapshot.rgba).ok()?;
+    }
+    Some(Preview {
+        png,
+        width: snapshot.width as f32 / metrics.scale,
+        height: snapshot.height as f32 / metrics.scale,
+    })
+}
+
+#[cfg(not(windows))]
+pub(crate) fn preview(
+    _widgets: &[crate::settings::TaskbarWidget],
+    _limits: &ProviderLimits,
+    _appearance: model::Appearance,
+    _scale: f32,
+    _height: f32,
+) -> Option<Preview> {
+    None
+}
+
+/// Publishes the latest limits snapshot.
+pub fn publish_limits(limits: &ProviderLimits) {
+    #[cfg(windows)]
+    host::publish(host::Message::Limits(limits.clone()));
+    #[cfg(not(windows))]
+    let _ = limits;
+}

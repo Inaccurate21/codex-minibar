@@ -106,7 +106,7 @@ pub(crate) fn capitalize_plan_name(plan: &str) -> String {
     )
 }
 
-pub(super) fn format_reset_in(reset: Option<DateTime<Utc>>) -> String {
+pub(crate) fn format_reset_in(reset: Option<DateTime<Utc>>) -> String {
     let Some(reset) = reset else {
         return crate::i18n::tr("unavailable").into();
     };

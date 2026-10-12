@@ -54,7 +54,7 @@ pub(crate) use state::UiState;
 
 pub(crate) use actions::*;
 use bridge::*;
-pub(crate) use formatting::capitalize_plan_name;
+pub(crate) use formatting::{capitalize_plan_name, format_reset_in};
 use formatting::*;
 pub(crate) use navigation::PopupView;
 use navigation::*;

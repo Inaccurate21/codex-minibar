@@ -1688,6 +1688,156 @@ impl TrayWidget {
     }
 }
 
+/// Visual design of one taskbar widget.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskbarWidgetStyle {
+    /// Provider mark beside two lines of text, like the Windows weather
+    /// button.
+    #[default]
+    Glance,
+    /// A progress ring per indicator with its value beside it.
+    Rings,
+    /// Thin progress bars stacked beside the provider mark.
+    Bars,
+    /// Text only, laid out like the taskbar clock.
+    Compact,
+}
+
+impl TaskbarWidgetStyle {
+    pub const ALL: [Self; 4] = [Self::Glance, Self::Rings, Self::Bars, Self::Compact];
+
+    /// How many indicators fit the taskbar height in this design.
+    pub const fn max_indicators(self) -> usize {
+        match self {
+            Self::Glance | Self::Compact => 2,
+            Self::Rings | Self::Bars => 3,
+        }
+    }
+
+    pub const fn index(self) -> usize {
+        match self {
+            Self::Glance => 0,
+            Self::Rings => 1,
+            Self::Bars => 2,
+            Self::Compact => 3,
+        }
+    }
+
+    pub fn from_index(index: usize) -> Self {
+        Self::ALL.get(index).copied().unwrap_or_default()
+    }
+}
+
+/// Where the widget strip sits on the taskbar.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskbarAlignment {
+    /// Immediately left of the notification area.
+    #[default]
+    Tray,
+    /// At the taskbar's leading edge, where the Windows widgets button lives.
+    Start,
+}
+
+fn new_taskbar_widget_id() -> String {
+    new_tray_widget_id().replacen("tray-", "taskbar-", 1)
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TaskbarWidget {
+    #[serde(default = "new_taskbar_widget_id")]
+    pub id: String,
+    #[serde(default)]
+    pub style: TaskbarWidgetStyle,
+    #[serde(default)]
+    pub indicators: Vec<TrayIndicator>,
+    /// Draws the provider mark of the first indicator.
+    #[serde(default = "default_true")]
+    pub show_icon: bool,
+}
+
+impl TaskbarWidget {
+    /// The provider preset: its first default tray metrics as a Glance.
+    pub fn for_provider(provider: ProviderId) -> Self {
+        let descriptor = crate::provider_registry::descriptor(provider.kind());
+        let style = TaskbarWidgetStyle::Glance;
+        Self {
+            id: new_taskbar_widget_id(),
+            style,
+            indicators: descriptor
+                .default_tray_metrics
+                .iter()
+                .take(style.max_indicators())
+                .map(|metric| TrayIndicator::new(provider, *metric))
+                .collect(),
+            show_icon: true,
+        }
+    }
+
+    pub fn duplicate_with_new_id(&self) -> Self {
+        let mut copy = self.clone();
+        copy.id = new_taskbar_widget_id();
+        copy
+    }
+
+    /// The instance a click opens: the first indicator's.
+    pub fn provider(&self) -> Option<ProviderId> {
+        self.indicators.iter().find_map(TrayIndicator::provider)
+    }
+
+    pub fn is_visible_for(&self, instances: &[ProviderInstance]) -> bool {
+        self.indicators.iter().any(|indicator| {
+            instances
+                .iter()
+                .any(|instance| instance.enabled && instance.id == indicator.provider_id)
+        })
+    }
+
+    pub fn normalize(&mut self) -> bool {
+        let mut changed = false;
+        if self.id.is_empty() {
+            self.id = new_taskbar_widget_id();
+            changed = true;
+        }
+        let max = self.style.max_indicators();
+        if self.indicators.len() > max {
+            self.indicators.truncate(max);
+            changed = true;
+        }
+        changed
+    }
+}
+
+/// Live widgets drawn inside the Windows taskbar.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TaskbarSettings {
+    pub enabled: bool,
+    pub alignment: TaskbarAlignment,
+    pub widgets: Vec<TaskbarWidget>,
+}
+
+impl TaskbarSettings {
+    pub fn normalize(&mut self) -> bool {
+        let mut changed = false;
+        let mut ids = std::collections::HashSet::new();
+        for widget in &mut self.widgets {
+            changed |= widget.normalize();
+            if !ids.insert(widget.id.clone()) {
+                widget.id = new_taskbar_widget_id();
+                ids.insert(widget.id.clone());
+                changed = true;
+            }
+        }
+        changed
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct NotificationSettings {
@@ -1835,6 +1985,8 @@ pub struct Settings {
     /// key combination to other applications.
     pub popup_hotkey: Option<crate::hotkey::Hotkey>,
     pub tray_widgets: Vec<TrayWidget>,
+    /// Widgets drawn inside the Windows taskbar.
+    pub taskbar: TaskbarSettings,
     pub notifications: NotificationSettings,
     pub history_retention_days: u16,
     pub check_for_updates: bool,
@@ -1899,6 +2051,7 @@ impl Default for Settings {
             popup_hotkey: None,
             // An empty list intentionally means "show the ordinary app icon".
             tray_widgets: Vec::new(),
+            taskbar: TaskbarSettings::default(),
             notifications: NotificationSettings::default(),
             history_retention_days: 30,
             check_for_updates: true,
@@ -1951,7 +2104,8 @@ impl Settings {
         let moved_credentials = original_version < migration::INSTANCES_VERSION
             && migration::finish_instance_migration(&mut settings);
         let repaired = settings.repair_inplace();
-        let tray_widgets_normalized = settings.normalize_tray_widgets();
+        let tray_widgets_normalized =
+            settings.normalize_tray_widgets() | settings.taskbar.normalize();
         let popup_visibility_normalized = settings.normalize_popup_visibility();
         if dirty
             || moved_credentials
@@ -1981,6 +2135,7 @@ impl Settings {
             .with_context(|| format!("{} is not a valid settings file", path.display()))?;
         settings.repair_inplace();
         settings.normalize_tray_widgets();
+        settings.taskbar.normalize();
         settings.normalize_popup_visibility();
         Ok(settings)
     }

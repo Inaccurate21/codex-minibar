@@ -31,6 +31,7 @@ pub mod settings_window;
 pub mod single_instance;
 pub mod store;
 pub mod streamdeck;
+pub mod taskbar;
 pub mod theme;
 pub mod tray;
 pub mod troubleshoot;

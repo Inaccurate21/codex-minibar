@@ -255,6 +255,10 @@ pub(super) fn start_background_bridge(state: Arc<AppState>) {
             flush_popup_ui(&ui);
         }
 
+        crate::taskbar::register_bridge_thread();
+        crate::taskbar::publish_limits(&state.current_limits());
+        crate::taskbar::publish_settings(&state.settings);
+
         // First frame: the renderer seeds itself from settings, then takes
         // this complete snapshot (errors, activation text, update state).
         publish_popup_ui(&ui);
@@ -346,6 +350,8 @@ pub(super) fn start_background_bridge(state: Arc<AppState>) {
             ) {
                 ui.set_popup_error(error.to_string());
             }
+            crate::taskbar::publish_limits(&state.current_limits());
+            crate::taskbar::publish_settings(&settings);
             for (provider, commands) in state.worker_commands() {
                 let _ = commands.send(WorkerCommand::SetAutomaticActivation(
                     crate::provider::automatic_activation(provider, &settings),
@@ -524,6 +530,7 @@ pub(super) fn start_background_bridge(state: Arc<AppState>) {
                 );
                 drain_updates(&mut ui, &mut tray, &mut update_phase, &mut widgets);
                 pump_popup_hotkey(&mut hotkey, &live_settings, &mut ui);
+                pump_taskbar_actions(&settings_tx, &mut ui);
                 if pump_tray_and_dismiss(&tray, &settings_tx, &state, &mut ui) {
                     drop(tray);
                     AppState::flush_limits_persistence();
@@ -559,6 +566,7 @@ pub(super) fn start_background_bridge(state: Arc<AppState>) {
             );
             drain_updates(&mut ui, &mut tray, &mut update_phase, &mut widgets);
             pump_popup_hotkey(&mut hotkey, &live_settings, &mut ui);
+            pump_taskbar_actions(&settings_tx, &mut ui);
             if pump_tray_and_dismiss(&tray, &settings_tx, &state, &mut ui) {
                 drop(tray);
                 AppState::flush_limits_persistence();
@@ -713,6 +721,7 @@ pub(super) fn start_background_bridge(state: Arc<AppState>) {
                     } else {
                         ui.error = None;
                     }
+                    crate::taskbar::publish_limits(&limits);
                     if provider == ProviderId::primary(ProviderKind::Codex) {
                         ui.last_activation =
                             format_last_activation(limits.get(provider), fallback_attempt);
@@ -932,6 +941,41 @@ fn pump_popup_hotkey(
     } else {
         flush_popup_ui(ui);
         popup::show_near_cursor();
+    }
+}
+
+/// Clicks and menu choices from the taskbar widgets.
+fn pump_taskbar_actions(settings_tx: &Sender<Settings>, ui: &mut UiState) {
+    for action in crate::taskbar::take_actions() {
+        match action {
+            crate::taskbar::Action::Open { provider, anchor } => {
+                if popup::is_visible() {
+                    // Same toggle as a tray click; Settings keeps its preview.
+                    if !crate::settings_window::is_open() {
+                        popup::hide();
+                    }
+                } else {
+                    match provider {
+                        Some(provider) => crate::popup_window::request_provider_view(provider),
+                        None => crate::popup_window::request_home_view(),
+                    }
+                    flush_popup_ui(ui);
+                    popup::show_near(anchor.0, anchor.1);
+                }
+            }
+            crate::taskbar::Action::Settings => {
+                flush_popup_ui(ui);
+                if !popup::is_visible() || popup::is_closing() {
+                    popup::show_near_cursor();
+                }
+                crate::settings_window::open_taskbar();
+            }
+            crate::taskbar::Action::Hide => {
+                crate::settings_window::persist_update(settings_tx.clone(), |settings| {
+                    settings.taskbar.enabled = false;
+                });
+            }
+        }
     }
 }
 

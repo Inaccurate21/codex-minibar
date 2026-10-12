@@ -41,6 +41,7 @@ mod onboarding;
 mod persistence;
 mod providers;
 pub(crate) mod theme;
+mod taskbar;
 mod tray;
 mod troubleshoot;
 mod vscode_themes;
@@ -90,6 +91,8 @@ pub(crate) enum Command {
     OpenRouter(OpenRouterSettingsSnapshot),
     /// The popup shortcut's registration status changed.
     HotkeyStatus,
+    /// Open Settings on the Taskbar page.
+    OpenTaskbar,
 }
 
 fn post(command: Command) {
@@ -99,6 +102,11 @@ fn post(command: Command) {
 /// Open (or focus) the Settings window.
 pub fn open() {
     post(Command::Open);
+}
+
+/// Open (or focus) Settings on the Taskbar page.
+pub fn open_taskbar() {
+    post(Command::OpenTaskbar);
 }
 
 /// Optimistic local edits own the displayed settings while the serial writer
@@ -253,6 +261,15 @@ pub(crate) fn handle(command: Command, state: &Arc<AppState>, cx: &mut AsyncApp)
             cx.notify();
         }),
         Command::HotkeyStatus => with_settings_window(cx, |_, cx| cx.notify()),
+        Command::OpenTaskbar => {
+            if focus_existing(&ONBOARDING_WINDOW, cx) {
+                return;
+            }
+            if !focus_existing(&SETTINGS_WINDOW, cx) {
+                open_settings_window(Arc::clone(state), cx);
+            }
+            with_settings_window(cx, |root, cx| root.open_tab(nav::Tab::Taskbar, cx));
+        }
     }
 }
 

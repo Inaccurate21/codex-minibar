@@ -3847,3 +3847,111 @@ popup-shortcut-in-use = { "" }
 # English source:
 # clear-shortcut = Remove shortcut
 clear-shortcut = { "" }
+
+# English source:
+# taskbar = Taskbar
+taskbar = { "" }
+
+# English source:
+# preview = Preview
+preview = { "" }
+
+# English source:
+# taskbar-page-caption = Live usage widgets drawn inside the Windows taskbar, next to the clock. They follow the taskbar's theme; click one to open the popup on its provider.
+taskbar-page-caption = { "" }
+
+# English source:
+# taskbar-show-widgets = Show widgets on the taskbar
+taskbar-show-widgets = { "" }
+
+# English source:
+# taskbar-show-widgets-description = Draws the widgets below inside the Windows taskbar.
+taskbar-show-widgets-description = { "" }
+
+# English source:
+# taskbar-position = Position
+taskbar-position = { "" }
+
+# English source:
+# taskbar-position-description = Where the widgets sit on the taskbar. The start suits centered taskbar icons best.
+taskbar-position-description = { "" }
+
+# English source:
+# taskbar-position-tray = Next to the notification area
+taskbar-position-tray = { "" }
+
+# English source:
+# taskbar-position-start = At the start of the taskbar
+taskbar-position-start = { "" }
+
+# English source:
+# taskbar-widgets = Widgets
+taskbar-widgets = { "" }
+
+# English source:
+# taskbar-no-widgets = No widgets yet
+taskbar-no-widgets = { "" }
+
+# English source:
+# taskbar-no-widgets-description = Add a widget to show a quota on the taskbar.
+taskbar-no-widgets-description = { "" }
+
+# English source:
+# taskbar-show-provider-icon = Show the provider icon
+taskbar-show-provider-icon = { "" }
+
+# English source:
+# taskbar-style-glance = Glance
+taskbar-style-glance = { "" }
+
+# English source:
+# taskbar-style-compact = Compact
+taskbar-style-compact = { "" }
+
+# English source:
+# taskbar-style-glance-hint = The provider icon beside two lines of text, like the weather button.
+taskbar-style-glance-hint = { "" }
+
+# English source:
+# taskbar-style-rings-hint = A progress ring per quota with its value beside it.
+taskbar-style-rings-hint = { "" }
+
+# English source:
+# taskbar-style-bars-hint = Thin progress bars stacked beside the provider icon.
+taskbar-style-bars-hint = { "" }
+
+# English source:
+# taskbar-style-compact-hint = Text only, laid out like the taskbar clock.
+taskbar-style-compact-hint = { "" }
+
+# English source:
+# taskbar-menu-open = Open Codex Minibar
+taskbar-menu-open = { "" }
+
+# English source:
+# taskbar-menu-settings = Taskbar widget settings
+taskbar-menu-settings = { "" }
+
+# English source:
+# taskbar-menu-hide = Hide taskbar widgets
+taskbar-menu-hide = { "" }
+
+# English source:
+# taskbar-card-left = { $value } left
+taskbar-card-left = { "" }
+
+# English source:
+# taskbar-card-used = { $value } used
+taskbar-card-used = { "" }
+
+# English source:
+# taskbar-card-resets = Resets in { $time } · { $clock }
+taskbar-card-resets = { "" }
+
+# English source:
+# taskbar-card-no-data = Waiting for data
+taskbar-card-no-data = { "" }
+
+# English source:
+# taskbar-card-hint = Click to open · Right-click for options
+taskbar-card-hint = { "" }
