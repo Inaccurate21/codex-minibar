@@ -968,6 +968,12 @@ impl Host {
     fn teardown(&mut self) {
         super::obstacles::set_wanted(false);
         self.obstacles = None;
+        self.hide();
+    }
+
+    /// Destroys the strip but keeps measuring Explorer's buttons, so widgets
+    /// squeezed out by app buttons return once there is room again.
+    fn hide(&mut self) {
         self.card = None;
         unsafe { KillTimer(self.controller, TIMER_CARD) };
         self.slots.clear();
@@ -1117,7 +1123,7 @@ impl Host {
         let total = x;
         if total <= 0.5 {
             if self.slots.is_empty() {
-                self.teardown();
+                self.hide();
             }
             return;
         }
@@ -1639,8 +1645,9 @@ fn free_span(geometry: Geometry, obstacles: Option<Obstacles>) -> (i32, f32) {
 
 /// Keeps as many widgets, in order, as fit `available` DIPs, giving up
 /// detail on all of them (see [`WidgetView::compacted`]) before a widget
-/// overflows the way notification icons do. The first widget always stays,
-/// at its most compact, even where it has to cover Explorer's buttons.
+/// overflows the way notification icons do. Without room for even the first
+/// widget at its most compact, nothing is shown rather than covering
+/// Explorer's buttons.
 fn fit(
     views: Vec<WidgetView>,
     available: f32,
@@ -1675,12 +1682,7 @@ fn fit(
             }
         }
     }
-    layouts
-        .pop()
-        .unwrap_or_default()
-        .into_iter()
-        .take(1)
-        .unzip()
+    (Vec::new(), Vec::new())
 }
 
 /// Bounds of the monitor showing `window`.
@@ -1842,15 +1844,22 @@ mod tests {
             .collect()
     }
 
-    /// A stand-in for the renderer: 20 DIPs of graphics plus the extras.
+    /// A stand-in for the renderer: 20 DIPs of graphics (10 for meters)
+    /// plus the extras.
     fn width(view: &WidgetView) -> f32 {
-        20.0 + if view.icon.is_some() { 20.0 } else { 0.0 }
+        let graphic = if view.style == TaskbarWidgetStyle::Meters {
+            10.0
+        } else {
+            20.0
+        };
+        graphic
+            + if view.icon.is_some() { 20.0 } else { 0.0 }
             + if view.show_labels { 10.0 } else { 0.0 }
             + if view.show_values { 10.0 } else { 0.0 }
     }
 
     #[test]
-    fn widgets_shrink_before_they_overflow_and_one_always_stays() {
+    fn widgets_shrink_before_they_overflow_and_hide_without_room() {
         let full = width(&bars(1)[0]);
         let all = bars(2);
         let (views, _) = fit(all.clone(), full * 2.0 + WIDGET_GAP, width);
@@ -1863,14 +1872,27 @@ mod tests {
                 .iter()
                 .all(|view| view.icon.is_none() && !view.has_text())
         );
+        assert!(
+            views
+                .iter()
+                .all(|view| view.style == TaskbarWidgetStyle::Bars)
+        );
         assert_eq!(widths, [20.0, 20.0]);
 
-        let (views, widths) = fit(bars(2), 30.0, width);
-        assert_eq!(views.len(), 1);
-        assert_eq!(widths, [20.0]);
+        let (views, widths) = fit(bars(2), 2.0 * 10.0 + WIDGET_GAP, width);
+        assert_eq!(views.len(), 2);
+        assert!(
+            views
+                .iter()
+                .all(|view| view.style == TaskbarWidgetStyle::Meters)
+        );
+        assert_eq!(widths, [10.0, 10.0]);
 
-        let (views, widths) = fit(bars(2), 0.0, width);
+        let (views, widths) = fit(bars(2), 15.0, width);
         assert_eq!(views.len(), 1);
-        assert_eq!(widths, [20.0]);
+        assert_eq!(widths, [10.0]);
+
+        let (views, widths) = fit(bars(2), 5.0, width);
+        assert!(views.is_empty() && widths.is_empty());
     }
 }

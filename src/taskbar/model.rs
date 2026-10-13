@@ -136,8 +136,8 @@ impl WidgetView {
 
     /// The widget with detail given up to keep its place on a crowded
     /// taskbar: reset times first, then labels, values and the mark. At
-    /// [`COMPACT_LEVELS`] graphic designs keep only their graphics and text
-    /// designs only their values.
+    /// [`COMPACT_LEVELS`] every design becomes bare meters, the narrowest
+    /// graphic.
     pub(crate) fn compacted(&self, level: u8) -> Self {
         let mut view = self.clone();
         let graphic = view.style.has_graphic();
@@ -157,12 +157,19 @@ impl WidgetView {
         if level >= 4 {
             view.icon = None;
         }
+        if level >= 5 {
+            view.style = TaskbarWidgetStyle::Meters;
+            view.rows
+                .truncate(TaskbarWidgetStyle::Meters.max_indicators());
+            view.show_labels = false;
+            view.show_values = false;
+        }
         view
     }
 }
 
 /// How many steps [`WidgetView::compacted`] takes to the shortest layout.
-pub(crate) const COMPACT_LEVELS: u8 = 4;
+pub(crate) const COMPACT_LEVELS: u8 = 5;
 
 /// Compact countdown: `2h 13m`, `3d 4h`, `45m`.
 pub(crate) fn countdown(reset: DateTime<Utc>, now: DateTime<Utc>) -> String {
