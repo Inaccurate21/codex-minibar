@@ -665,6 +665,13 @@ impl Host {
             self.teardown();
             return;
         };
+        if !self.window.is_null()
+            && unsafe { windows_sys::Win32::UI::WindowsAndMessaging::GetParent(self.window) }
+                != geometry.taskbar
+        {
+            // A new taskbar after an Explorer restart: start over on it.
+            self.teardown();
+        }
         if views.is_empty() && self.window.is_null() {
             self.slots.clear();
             return;
