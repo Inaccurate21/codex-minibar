@@ -2770,7 +2770,7 @@ performance = Производительность
 game-mode = Игровой режим
 
 # src/settings_window/advanced.rs
-game-mode-description = Реже проверяет лимиты и статистику, работает с низким приоритетом и приостанавливает уведомления. «Автоматически» включает его, пока открыта полноэкранная игра или приложение.
+game-mode-description = Реже проверяет лимиты и статистику, работает с низким приоритетом и приостанавливает уведомления. «Автоматически» включает его, когда игра выходит на передний план, и держит, пока она не закроется.
 
 # src/settings.rs
 game-mode-off = Выключен
@@ -2792,6 +2792,21 @@ game-mode-on-title = Игровой режим включён
 
 # src/notifications.rs
 game-mode-on-body = Лимиты проверяются реже, уведомления приостановлены
+
+# src/notifications.rs
+game-mode-on-game-body = Запущена { $game }. Лимиты проверяются реже, уведомления приостановлены
+
+# src/notifications.rs
+not-a-game = Это не игра
+
+# src/settings_window/advanced.rs
+add-a-game = Добавить игру
+
+# src/settings_window/advanced.rs
+add-a-game-description = Игры, известные Xbox Game Bar, и игры из Steam, Epic, GOG и Xbox определяются сами. Здесь можно добавить любую другую программу.
+
+# src/settings_window/advanced.rs
+never-a-game-path = Никогда не игра · { $path }
 
 # src/notifications.rs
 game-mode-off-title = Игровой режим выключен

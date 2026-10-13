@@ -1874,7 +1874,7 @@ performance = Desempenho
 game-mode = Modo jogo
 
 # src/settings_window/advanced.rs
-game-mode-description = Verifica limites e uso com menos frequência, roda com prioridade baixa e pausa as notificações. Automático o ativa enquanto um jogo ou app estiver em tela cheia.
+game-mode-description = Verifica limites e uso com menos frequência, roda com prioridade baixa e pausa as notificações. Automático o ativa quando um jogo vem para a frente e o mantém até o jogo fechar.
 
 # src/settings.rs
 game-mode-off = Desligado
@@ -1896,6 +1896,21 @@ game-mode-on-title = Modo jogo ligado
 
 # src/notifications.rs
 game-mode-on-body = Limites verificados com menos frequência e notificações pausadas
+
+# src/notifications.rs
+game-mode-on-game-body = { $game } está em execução. Limites verificados com menos frequência e notificações pausadas
+
+# src/notifications.rs
+not-a-game = Não é um jogo
+
+# src/settings_window/advanced.rs
+add-a-game = Adicionar jogo
+
+# src/settings_window/advanced.rs
+add-a-game-description = Jogos conhecidos pela Game Bar do Windows e jogos da Steam, Epic, GOG e Xbox são detectados sozinhos. Adicione aqui qualquer outro programa.
+
+# src/settings_window/advanced.rs
+never-a-game-path = Nunca é um jogo · { $path }
 
 # src/notifications.rs
 game-mode-off-title = Modo jogo desligado

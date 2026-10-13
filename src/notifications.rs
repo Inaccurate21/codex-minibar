@@ -60,6 +60,8 @@ impl NotificationKind {
 pub enum NotificationAction {
     InstallUpdate,
     OpenUrl(String),
+    /// Never treat this executable as a game again.
+    IgnoreGame(String),
 }
 
 impl NotificationAction {
@@ -82,6 +84,7 @@ impl NotificationAction {
                     eprintln!("failed to open {url}: {error:#}");
                 }
             }
+            NotificationAction::IgnoreGame(path) => crate::game_mode::ignore_game(path),
         });
     }
 }
@@ -332,21 +335,32 @@ pub fn show_update_failed(error: &anyhow::Error) {
     );
 }
 
-/// Game mode turned on or off.
-pub fn show_game_mode_changed(active: bool) {
-    let (title, body) = if active {
-        ("game-mode-on-title", "game-mode-on-body")
-    } else {
-        ("game-mode-off-title", "game-mode-off-body")
+/// Game mode turned on or off; `game` is the `(name, executable)` that
+/// turned it on, which the card offers to never treat as a game again.
+pub fn show_game_mode_changed(active: bool, game: Option<(String, String)>) {
+    let (title, body) = match (&game, active) {
+        (Some((name, _)), true) => (
+            crate::i18n::tr("game-mode-on-title"),
+            crate::i18n::format("game-mode-on-game-body", &[("game", name.clone())]),
+        ),
+        (None, true) => (
+            crate::i18n::tr("game-mode-on-title"),
+            crate::i18n::tr("game-mode-on-body").to_owned(),
+        ),
+        (_, false) => (
+            crate::i18n::tr("game-mode-off-title"),
+            crate::i18n::tr("game-mode-off-body").to_owned(),
+        ),
     };
-    notify(
-        Notification::new(
-            NotificationKind::Info,
-            crate::i18n::tr(title),
-            crate::i18n::tr(body),
-        )
-        .keyed(GAME_MODE_KEY),
-    );
+    let mut notification =
+        Notification::new(NotificationKind::Info, title, &body).keyed(GAME_MODE_KEY);
+    if let Some((_, path)) = game.filter(|_| active) {
+        notification = notification.with_action(
+            crate::i18n::tr("not-a-game"),
+            NotificationAction::IgnoreGame(path),
+        );
+    }
+    notify(notification);
 }
 
 /// A new incident on a provider's public status page.

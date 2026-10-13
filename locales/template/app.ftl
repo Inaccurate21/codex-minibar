@@ -4088,7 +4088,7 @@ performance = { "" }
 game-mode = { "" }
 
 # English source:
-# game-mode-description = Checks limits and usage less often, runs at low priority and pauses notifications. Automatic turns it on while a full-screen game or app is open.
+# game-mode-description = Checks limits and usage less often, runs at low priority and pauses notifications. Automatic turns it on while a game runs, from the moment it is in front until it closes.
 game-mode-description = { "" }
 
 # English source:
@@ -4118,6 +4118,26 @@ game-mode-on-title = { "" }
 # English source:
 # game-mode-on-body = Checking limits less often and pausing notifications
 game-mode-on-body = { "" }
+
+# English source:
+# game-mode-on-game-body = { $game } is running. Checking limits less often and pausing notifications
+game-mode-on-game-body = { "" }
+
+# English source:
+# not-a-game = Not a game
+not-a-game = { "" }
+
+# English source:
+# add-a-game = Add a game
+add-a-game = { "" }
+
+# English source:
+# add-a-game-description = Games known to Windows Game Bar and games from Steam, Epic, GOG and Xbox are detected on their own. Add any other program here.
+add-a-game-description = { "" }
+
+# English source:
+# never-a-game-path = Never a game · { $path }
+never-a-game-path = { "" }
 
 # English source:
 # game-mode-off-title = Game mode off

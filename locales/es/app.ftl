@@ -1874,7 +1874,7 @@ performance = Rendimiento
 game-mode = Modo juego
 
 # src/settings_window/advanced.rs
-game-mode-description = Consulta límites y uso con menos frecuencia, se ejecuta con prioridad baja y pausa las notificaciones. Automático lo activa mientras haya un juego o una app a pantalla completa.
+game-mode-description = Consulta límites y uso con menos frecuencia, se ejecuta con prioridad baja y pausa las notificaciones. Automático lo activa cuando un juego pasa a primer plano y lo mantiene hasta que se cierra.
 
 # src/settings.rs
 game-mode-off = Desactivado
@@ -1896,6 +1896,21 @@ game-mode-on-title = Modo juego activado
 
 # src/notifications.rs
 game-mode-on-body = Se consultan los límites con menos frecuencia y se pausan las notificaciones
+
+# src/notifications.rs
+game-mode-on-game-body = { $game } está en ejecución. Se consultan los límites con menos frecuencia y se pausan las notificaciones
+
+# src/notifications.rs
+not-a-game = No es un juego
+
+# src/settings_window/advanced.rs
+add-a-game = Añadir un juego
+
+# src/settings_window/advanced.rs
+add-a-game-description = Los juegos que conoce Windows Game Bar y los de Steam, Epic, GOG y Xbox se detectan solos. Añade aquí cualquier otro programa.
+
+# src/settings_window/advanced.rs
+never-a-game-path = Nunca es un juego · { $path }
 
 # src/notifications.rs
 game-mode-off-title = Modo juego desactivado

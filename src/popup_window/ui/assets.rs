@@ -106,6 +106,7 @@ fn source(name: &str) -> Option<&'static str> {
         "flag-fill" => include_str!("../../../assets/icons/ph-flag-fill.svg"),
         "folder-fill" => include_str!("../../../assets/icons/ph-folder-fill.svg"),
         "folder-open-fill" => include_str!("../../../assets/icons/ph-folder-open-fill.svg"),
+        "game-controller-fill" => include_str!("../../../assets/icons/ph-game-controller-fill.svg"),
         "git-pull-request-fill" => {
             include_str!("../../../assets/icons/ph-git-pull-request-fill.svg")
         }
@@ -120,6 +121,7 @@ fn source(name: &str) -> Option<&'static str> {
         "plugs-connected-fill" => include_str!("../../../assets/icons/ph-plugs-connected-fill.svg"),
         "plus-bold" => include_str!("../../../assets/icons/ph-plus-bold.svg"),
         "plus-fill" => include_str!("../../../assets/icons/ph-plus-fill.svg"),
+        "prohibit-fill" => include_str!("../../../assets/icons/ph-prohibit-fill.svg"),
         "puzzle-piece-fill" => include_str!("../../../assets/icons/ph-puzzle-piece-fill.svg"),
         "seal-check-fill" => include_str!("../../../assets/icons/ph-seal-check-fill.svg"),
         "sign-in-bold" => include_str!("../../../assets/icons/ph-sign-in-bold.svg"),

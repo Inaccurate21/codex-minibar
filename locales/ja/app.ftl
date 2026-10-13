@@ -2743,7 +2743,7 @@ performance = パフォーマンス
 game-mode = ゲームモード
 
 # src/settings_window/advanced.rs
-game-mode-description = 制限と使用状況の確認頻度を下げ、低い優先度で動作し、通知を一時停止します。「自動」では全画面のゲームやアプリが開いている間だけオンになります。
+game-mode-description = 制限と使用状況の確認頻度を下げ、低い優先度で動作し、通知を一時停止します。「自動」ではゲームが前面に来たときにオンになり、ゲームを終了するまで続きます。
 
 # src/settings.rs
 game-mode-off = オフ
@@ -2765,6 +2765,21 @@ game-mode-on-title = ゲームモード オン
 
 # src/notifications.rs
 game-mode-on-body = 制限の確認頻度を下げ、通知を一時停止しています
+
+# src/notifications.rs
+game-mode-on-game-body = { $game } を実行中です。制限の確認頻度を下げ、通知を一時停止しています
+
+# src/notifications.rs
+not-a-game = ゲームではない
+
+# src/settings_window/advanced.rs
+add-a-game = ゲームを追加
+
+# src/settings_window/advanced.rs
+add-a-game-description = Windows Game Bar が認識しているゲームと、Steam、Epic、GOG、Xbox のゲームは自動で検出されます。その他のプログラムはここで追加できます。
+
+# src/settings_window/advanced.rs
+never-a-game-path = ゲームとして扱わない · { $path }
 
 # src/notifications.rs
 game-mode-off-title = ゲームモード オフ

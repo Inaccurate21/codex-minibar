@@ -1853,7 +1853,7 @@ performance = 性能
 game-mode = 游戏模式
 
 # src/settings_window/advanced.rs
-game-mode-description = 降低额度和用量的检查频率，以低优先级运行并暂停通知。“自动”会在全屏游戏或应用打开时开启。
+game-mode-description = 降低额度和用量的检查频率，以低优先级运行并暂停通知。“自动”会在游戏切到前台时开启，直到游戏关闭。
 
 # src/settings.rs
 game-mode-off = 关闭
@@ -1875,6 +1875,21 @@ game-mode-on-title = 游戏模式已开启
 
 # src/notifications.rs
 game-mode-on-body = 降低额度检查频率并暂停通知
+
+# src/notifications.rs
+game-mode-on-game-body = { $game } 正在运行。降低额度检查频率并暂停通知
+
+# src/notifications.rs
+not-a-game = 不是游戏
+
+# src/settings_window/advanced.rs
+add-a-game = 添加游戏
+
+# src/settings_window/advanced.rs
+add-a-game-description = Windows Game Bar 已识别的游戏以及 Steam、Epic、GOG 和 Xbox 中的游戏会被自动检测。可在此添加其他任何程序。
+
+# src/settings_window/advanced.rs
+never-a-game-path = 从不视为游戏 · { $path }
 
 # src/notifications.rs
 game-mode-off-title = 游戏模式已关闭

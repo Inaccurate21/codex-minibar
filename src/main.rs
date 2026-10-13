@@ -118,6 +118,7 @@ fn run() -> Result<()> {
         usage_actions_rx: Mutex::new(Some(usage_actions_rx)),
         updates: Arc::clone(&updates),
     });
+    codex_minibar::game_mode::set_settings_writer(state.settings_tx.clone());
     codex_minibar::updater::install_runtime(Arc::clone(&updates), {
         let state = Arc::clone(&state);
         move || state.shutdown_worker()

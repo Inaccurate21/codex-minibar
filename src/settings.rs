@@ -733,7 +733,8 @@ pub enum ProviderKind {
 #[serde(rename_all = "snake_case")]
 pub enum GameMode {
     Off,
-    /// While a full-screen game or app is in the foreground.
+    /// While a game runs: from the moment it is in the foreground until it
+    /// exits.
     #[default]
     Automatic,
     Always,
@@ -2030,7 +2031,7 @@ impl Default for NotificationSettings {
             provider_status_notifications: true,
             sound: true,
             follow_do_not_disturb: true,
-            game_mode_changes: true,
+            game_mode_changes: false,
         }
     }
 }
@@ -2135,6 +2136,11 @@ pub struct Settings {
     pub software_rendering: bool,
     /// When background work backs off to leave resources to games.
     pub game_mode: GameMode,
+    /// Executables Automatic game mode treats as games even when Windows
+    /// does not know them.
+    pub game_mode_games: Vec<String>,
+    /// Executables Automatic game mode never treats as games.
+    pub game_mode_ignored: Vec<String>,
 }
 
 fn default_show_usage_values() -> bool {
@@ -2198,6 +2204,8 @@ impl Default for Settings {
             check_for_updates: true,
             software_rendering: false,
             game_mode: GameMode::default(),
+            game_mode_games: Vec::new(),
+            game_mode_ignored: Vec::new(),
         };
         settings.enable_taskbar_by_default();
         settings
@@ -2853,7 +2861,12 @@ impl Settings {
         gpui::set_software_rendering(self.software_rendering);
         crate::notifications::set_sound_enabled(self.notifications.sound);
         crate::notifications::set_follow_do_not_disturb(self.notifications.follow_do_not_disturb);
-        crate::game_mode::apply(self.game_mode, self.notifications.game_mode_changes);
+        crate::game_mode::apply(
+            self.game_mode,
+            self.notifications.game_mode_changes,
+            &self.game_mode_games,
+            &self.game_mode_ignored,
+        );
         crate::popup::apply_popup_appearance(
             self.bottom_bar_size,
             self.popup_corner_radius,
