@@ -10,7 +10,9 @@ use chrono::{DateTime, Local, Timelike};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 
-pub const SETTINGS_VERSION: u32 = 40;
+pub const SETTINGS_VERSION: u32 = 41;
+/// First version where the taskbar widget is shown by default.
+const TASKBAR_DEFAULT_VERSION: u32 = 41;
 
 mod migration;
 
@@ -2141,7 +2143,7 @@ fn default_show_usage_values() -> bool {
 
 impl Default for Settings {
     fn default() -> Self {
-        Self {
+        let mut settings = Self {
             version: SETTINGS_VERSION,
             onboarding_completed: false,
             theme: AppTheme::Auto,
@@ -2196,11 +2198,34 @@ impl Default for Settings {
             check_for_updates: true,
             software_rendering: false,
             game_mode: GameMode::default(),
-        }
+        };
+        settings.enable_taskbar_by_default();
+        settings
     }
 }
 
 impl Settings {
+    /// Shows the taskbar widgets, seeding one for the first enabled provider
+    /// when there is none, so the feature is discoverable out of the box.
+    fn enable_taskbar_by_default(&mut self) -> bool {
+        let mut changed = !self.taskbar.enabled;
+        self.taskbar.enabled = true;
+        if self.taskbar.widgets.is_empty()
+            && let Some(instance) = self.instances.iter().find(|instance| {
+                instance.enabled
+                    && !crate::provider_registry::descriptor(instance.driver)
+                        .default_tray_metrics
+                        .is_empty()
+            })
+        {
+            self.taskbar
+                .widgets
+                .push(TaskbarWidget::for_provider(instance.provider_id()));
+            changed = true;
+        }
+        changed
+    }
+
     pub fn default_path() -> Result<PathBuf> {
         let dirs = ProjectDirs::from("dev", "Codex Minibar", "Codex Minibar")
             .context("could not resolve the application config directory")?;
@@ -2242,12 +2267,16 @@ impl Settings {
         };
         let moved_credentials = original_version < migration::INSTANCES_VERSION
             && migration::finish_instance_migration(&mut settings);
+        // Existing installs get the taskbar widget once, so they learn of it.
+        let taskbar_introduced =
+            original_version < TASKBAR_DEFAULT_VERSION && settings.enable_taskbar_by_default();
         let repaired = settings.repair_inplace();
         let tray_widgets_normalized =
             settings.normalize_tray_widgets() | settings.taskbar.normalize();
         let popup_visibility_normalized = settings.normalize_popup_visibility();
         if dirty
             || moved_credentials
+            || taskbar_introduced
             || repaired
             || tray_widgets_normalized
             || popup_visibility_normalized
@@ -3721,6 +3750,15 @@ fn migrate(document: &mut toml::Value, mut version: u32) -> Result<()> {
                 }
                 root.insert("version".into(), toml::Value::Integer(40));
                 version = 40;
+            }
+            40 => {
+                // The taskbar widget is switched on after decoding, where its
+                // default widget can be built from the enabled providers.
+                document
+                    .as_table_mut()
+                    .context("settings root must be a TOML table")?
+                    .insert("version".into(), toml::Value::Integer(41));
+                version = 41;
             }
             // Unknown future/gap versions: stamp current and keep decoding with
             // serde defaults rather than refusing to start.
