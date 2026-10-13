@@ -530,8 +530,8 @@ pub(super) fn start_background_bridge(state: Arc<AppState>) {
                 );
                 drain_updates(&mut ui, &mut tray, &mut update_phase, &mut widgets);
                 pump_popup_hotkey(&mut hotkey, &live_settings, &mut ui);
-                pump_taskbar_actions(&settings_tx, &mut ui);
-                if pump_tray_and_dismiss(&tray, &settings_tx, &state, &mut ui) {
+                let exit = pump_taskbar_actions(&settings_tx, &mut ui);
+                if exit || pump_tray_and_dismiss(&tray, &settings_tx, &state, &mut ui) {
                     drop(tray);
                     AppState::flush_limits_persistence();
                     state.shutdown_worker();
@@ -566,8 +566,8 @@ pub(super) fn start_background_bridge(state: Arc<AppState>) {
             );
             drain_updates(&mut ui, &mut tray, &mut update_phase, &mut widgets);
             pump_popup_hotkey(&mut hotkey, &live_settings, &mut ui);
-            pump_taskbar_actions(&settings_tx, &mut ui);
-            if pump_tray_and_dismiss(&tray, &settings_tx, &state, &mut ui) {
+            let exit = pump_taskbar_actions(&settings_tx, &mut ui);
+            if exit || pump_tray_and_dismiss(&tray, &settings_tx, &state, &mut ui) {
                 drop(tray);
                 AppState::flush_limits_persistence();
                 state.shutdown_worker();
@@ -945,37 +945,68 @@ fn pump_popup_hotkey(
 }
 
 /// Clicks and menu choices from the taskbar widgets.
-fn pump_taskbar_actions(settings_tx: &Sender<Settings>, ui: &mut UiState) {
+/// Performs the widgets' actions; returns whether the app should exit.
+fn pump_taskbar_actions(settings_tx: &Sender<Settings>, ui: &mut UiState) -> bool {
     for action in crate::taskbar::take_actions() {
         match action {
-            crate::taskbar::Action::Open { provider, anchor } => {
+            crate::taskbar::Action::Open {
+                provider,
+                anchor,
+                page,
+            } => {
                 if popup::is_visible() {
                     // Same toggle as a tray click; Settings keeps its preview.
                     if !crate::settings_window::is_open() {
                         popup::hide();
                     }
                 } else {
-                    match provider {
-                        Some(provider) => crate::popup_window::request_provider_view(provider),
-                        None => crate::popup_window::request_home_view(),
+                    use crate::settings::TaskbarClick;
+                    match (provider, page) {
+                        (Some(provider), TaskbarClick::Nearest) => {
+                            crate::popup_window::request_nearest_view(provider)
+                        }
+                        (Some(provider), TaskbarClick::Tab) => {
+                            crate::popup_window::request_provider_view(provider)
+                        }
+                        _ => crate::popup_window::request_home_view(),
                     }
                     flush_popup_ui(ui);
-                    popup::show_near(anchor.0, anchor.1);
+                    popup::show_beside(anchor.0, anchor.1);
                 }
             }
+            crate::taskbar::Action::Edit(id) => {
+                show_settings_preview(ui);
+                crate::settings_window::open_taskbar_widget(id);
+            }
             crate::taskbar::Action::Settings => {
-                flush_popup_ui(ui);
-                if !popup::is_visible() || popup::is_closing() {
-                    popup::show_near_cursor();
-                }
+                show_settings_preview(ui);
                 crate::settings_window::open_taskbar();
+            }
+            crate::taskbar::Action::AppSettings => {
+                show_settings_preview(ui);
+                crate::settings_window::open();
             }
             crate::taskbar::Action::Hide => {
                 crate::settings_window::persist_update(settings_tx.clone(), |settings| {
                     settings.taskbar.enabled = false;
                 });
             }
+            crate::taskbar::Action::Update => {
+                // Failures are reported on the update card.
+                let _ = crate::updater::apply_pending_update();
+            }
+            crate::taskbar::Action::Exit => return true,
         }
+    }
+    false
+}
+
+/// Settings opened from a widget keep the popup up as a live preview, like
+/// Settings opened from the tray menu.
+fn show_settings_preview(ui: &mut UiState) {
+    flush_popup_ui(ui);
+    if !popup::is_visible() || popup::is_closing() {
+        popup::show_near_cursor();
     }
 }
 

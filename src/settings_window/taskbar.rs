@@ -13,28 +13,100 @@ use super::tray::{IndicatorOwner, TrayDialog, dialog_section, preview_limits};
 use super::window::SettingsWindow;
 use crate::popup_window::ui::theme::rgb8;
 use crate::settings::{
-    ProviderId, TaskbarAlignment, TaskbarWidget, TaskbarWidgetStyle, TrayIndicator,
+    ProviderId, TaskbarAlignment, TaskbarClick, TaskbarResetDisplay, TaskbarWidget,
+    TaskbarWidgetStyle, TrayIndicator,
 };
 
 /// Height of the previewed taskbar, in DIPs: the Windows 11 default.
 const TASKBAR_HEIGHT: f32 = 48.0;
 
-fn style_labels() -> [&'static str; 4] {
-    [
-        crate::i18n::tr("taskbar-style-glance"),
-        crate::i18n::tr("rings"),
-        crate::i18n::tr("progress-bars"),
-        crate::i18n::tr("taskbar-style-compact"),
-    ]
+/// Width of the widget editor.
+const DIALOG_WIDTH: f32 = 640.0;
+/// Style tiles per picker row.
+const STYLE_COLUMNS: usize = 3;
+const STYLE_GAP: f32 = 8.0;
+/// Each tile's share of the dialog body (24 DIP padding on both sides).
+const STYLE_TILE: f32 =
+    (DIALOG_WIDTH - 48.0 - STYLE_GAP * (STYLE_COLUMNS as f32 - 1.0)) / STYLE_COLUMNS as f32;
+const STYLE_PAD: f32 = 6.0;
+const PLATE_PAD: f32 = 4.0;
+
+fn style_label(style: TaskbarWidgetStyle) -> &'static str {
+    crate::i18n::tr(match style {
+        TaskbarWidgetStyle::Glance => "taskbar-style-glance",
+        TaskbarWidgetStyle::Rings => "rings",
+        TaskbarWidgetStyle::Nested => "taskbar-style-nested",
+        TaskbarWidgetStyle::Dials => "taskbar-style-dials",
+        TaskbarWidgetStyle::Bars => "progress-bars",
+        TaskbarWidgetStyle::Meters => "taskbar-style-meters",
+    })
 }
 
-fn style_hints() -> [&'static str; 4] {
-    [
-        crate::i18n::tr("taskbar-style-glance-hint"),
-        crate::i18n::tr("taskbar-style-rings-hint"),
-        crate::i18n::tr("taskbar-style-bars-hint"),
-        crate::i18n::tr("taskbar-style-compact-hint"),
-    ]
+fn style_hint(style: TaskbarWidgetStyle) -> &'static str {
+    crate::i18n::tr(match style {
+        TaskbarWidgetStyle::Glance => "taskbar-style-glance-hint",
+        TaskbarWidgetStyle::Rings => "taskbar-style-rings-hint",
+        TaskbarWidgetStyle::Nested => "taskbar-style-nested-hint",
+        TaskbarWidgetStyle::Dials => "taskbar-style-dials-hint",
+        TaskbarWidgetStyle::Bars => "taskbar-style-bars-hint",
+        TaskbarWidgetStyle::Meters => "taskbar-style-meters-hint",
+    })
+}
+
+/// A per-widget switch in the editor.
+struct WidgetToggle {
+    id: &'static str,
+    title: &'static str,
+    description: &'static str,
+    value: bool,
+    set: fn(&mut TaskbarWidget, bool),
+}
+
+/// One line of the editor's Content card.
+enum WidgetOption {
+    Toggle(WidgetToggle),
+    Reset(TaskbarResetDisplay),
+}
+
+/// What this style can show, in the order the card lists it.
+fn widget_options(widget: &TaskbarWidget) -> Vec<WidgetOption> {
+    let style = widget.style;
+    let mut options = vec![WidgetOption::Toggle(WidgetToggle {
+        id: "icon",
+        title: "taskbar-show-provider-icon",
+        description: "taskbar-show-provider-icon-description",
+        value: widget.show_icon,
+        set: |widget, value| widget.show_icon = value,
+    })];
+    options.push(WidgetOption::Toggle(WidgetToggle {
+        id: "values",
+        title: "taskbar-show-values",
+        description: "taskbar-show-values-description",
+        value: widget.show_values,
+        set: |widget, value| widget.show_values = value,
+    }));
+    if style.has_labels() {
+        options.push(WidgetOption::Toggle(WidgetToggle {
+            id: "labels",
+            title: "taskbar-show-labels",
+            description: "taskbar-show-labels-description",
+            value: widget.show_labels,
+            set: |widget, value| widget.show_labels = value,
+        }));
+    }
+    if style.has_reset() {
+        options.push(WidgetOption::Reset(widget.reset));
+    }
+    if style.has_graphic() {
+        options.push(WidgetOption::Toggle(WidgetToggle {
+            id: "pace",
+            title: "taskbar-show-pace",
+            description: "taskbar-show-pace-description",
+            value: widget.show_pace,
+            set: |widget, value| widget.show_pace = value,
+        }));
+    }
+    options
 }
 
 #[derive(Clone, PartialEq)]
@@ -54,7 +126,7 @@ fn widget_title(index: usize) -> String {
 }
 
 fn widget_summary(widget: &TaskbarWidget) -> String {
-    let style = style_labels()[widget.style.index()];
+    let style = style_label(widget.style);
     let mut providers: Vec<String> = Vec::new();
     for provider in widget.indicators.iter().filter_map(TrayIndicator::provider) {
         let name = provider.qualified_name();
@@ -80,13 +152,31 @@ fn taskbar_plate(light: bool) -> gpui::Hsla {
 
 impl SettingsWindow {
     /// The widgets rendered exactly as the taskbar draws them, with sample
-    /// quotas, keyed by `key` in the preview cache.
+    /// quotas, at their natural size.
     fn taskbar_preview(
         &mut self,
         key: String,
         widgets: &[TaskbarWidget],
         window: &Window,
     ) -> Option<AnyElement> {
+        let (image, size) = self.taskbar_image(key, widgets, window)?;
+        Some(
+            img(image)
+                .w(px(size.0))
+                .h(px(size.1))
+                .flex_none()
+                .into_any_element(),
+        )
+    }
+
+    /// The rendered strip and its size in DIPs, keyed by `key` in the
+    /// preview cache.
+    fn taskbar_image(
+        &mut self,
+        key: String,
+        widgets: &[TaskbarWidget],
+        window: &Window,
+    ) -> Option<(Arc<gpui::Image>, (f32, f32))> {
         let light = crate::taskbar::uses_light_theme();
         let scale = window.scale_factor();
         let cache_key = PreviewKey {
@@ -121,13 +211,7 @@ impl SettingsWindow {
                 (image, size)
             }
         };
-        Some(
-            img(image)
-                .w(px(size.0))
-                .h(px(size.1))
-                .flex_none()
-                .into_any_element(),
-        )
+        Some((image, size))
     }
 
     /// A widget on a slice of taskbar, as tall as the real one.
@@ -191,6 +275,20 @@ impl SettingsWindow {
         bar.child(div().px(px(6.0)).child(kit::icon("caret-up", 12.0, text)))
             .child(clock)
             .into_any_element()
+    }
+
+    /// Opens the editor of the widget `id`, if it still exists.
+    pub(crate) fn open_taskbar_dialog(&mut self, id: String, cx: &mut Context<Self>) {
+        if self
+            .settings
+            .taskbar
+            .widgets
+            .iter()
+            .any(|widget| widget.id == id)
+        {
+            self.taskbar_dialog = Some(TrayDialog::new(id));
+            cx.notify();
+        }
     }
 
     fn set_taskbar_widgets(&mut self, mut widgets: Vec<TaskbarWidget>, cx: &mut Context<Self>) {
@@ -288,15 +386,46 @@ impl SettingsWindow {
                         this.edit(cx, move |settings| settings.taskbar.alignment = alignment);
                     }),
                 ),
+                kit::dropdown_row(
+                    k,
+                    "taskbar-click",
+                    crate::i18n::tr("taskbar-click"),
+                    Some(crate::i18n::tr("taskbar-click-description")),
+                    kit::options(&[
+                        crate::i18n::tr("taskbar-click-nearest"),
+                        crate::i18n::tr("taskbar-click-tab"),
+                        crate::i18n::tr("taskbar-click-home"),
+                    ]),
+                    taskbar.click.index() as i32,
+                    false,
+                    Self::h(cx, |this, index: usize, _, cx| {
+                        let click = TaskbarClick::ALL.get(index).copied().unwrap_or_default();
+                        this.edit(cx, move |settings| settings.taskbar.click = click);
+                    }),
+                ),
+                kit::toggle_row(
+                    k,
+                    "taskbar-cycle",
+                    crate::i18n::tr("taskbar-cycle"),
+                    Some(crate::i18n::tr("taskbar-cycle-description").into()),
+                    taskbar.cycle,
+                    Self::h(cx, |this, value: bool, _, cx| {
+                        this.edit(cx, move |settings| settings.taskbar.cycle = value)
+                    }),
+                ),
             ]
         }));
 
-        let visible = taskbar
+        let mut visible = taskbar
             .widgets
             .iter()
             .filter(|widget| widget.is_visible_for(&self.settings.instances))
             .cloned()
             .collect::<Vec<_>>();
+        if taskbar.cycle {
+            // The taskbar starts the cycle on the first widget.
+            visible.truncate(1);
+        }
         if !visible.is_empty() {
             rows.push(kit::section_heading(k, crate::i18n::tr("preview")));
             let mock = self.taskbar_mock(k, &visible, window);
@@ -514,27 +643,64 @@ impl SettingsWindow {
         body.push(dialog_section(
             k,
             crate::i18n::tr("style"),
-            style_hints()[widget.style.index()],
+            style_hint(widget.style),
         ));
         body.push(self.taskbar_style_picker(k, index, &widget, window, cx));
-        if widget.style != TaskbarWidgetStyle::Compact {
-            body.push(kit::card_of(k, |k| {
-                vec![kit::toggle_row(
-                    k,
-                    format!("taskbar-{}-icon", widget.id),
-                    crate::i18n::tr("taskbar-show-provider-icon"),
-                    None,
-                    widget.show_icon,
-                    Self::h(cx, move |this, value: bool, _, cx| {
-                        this.update_taskbar_widgets(cx, |widgets| {
-                            if let Some(widget) = widgets.get_mut(index) {
-                                widget.show_icon = value;
-                            }
-                        })
-                    }),
-                )]
-            }));
-        }
+        body.push(dialog_section(
+            k,
+            crate::i18n::tr("taskbar-content"),
+            crate::i18n::tr("taskbar-content-hint"),
+        ));
+        let options = widget_options(&widget);
+        let widget_id = widget.id.clone();
+        body.push(kit::card_of(k, |k| {
+            options
+                .into_iter()
+                .map(|option| match option {
+                    WidgetOption::Toggle(toggle) => {
+                        let set = toggle.set;
+                        kit::toggle_row(
+                            k,
+                            format!("taskbar-{widget_id}-{}", toggle.id),
+                            crate::i18n::tr(toggle.title),
+                            Some(crate::i18n::tr(toggle.description).into()),
+                            toggle.value,
+                            Self::h(cx, move |this, value: bool, _, cx| {
+                                this.update_taskbar_widgets(cx, |widgets| {
+                                    if let Some(widget) = widgets.get_mut(index) {
+                                        set(widget, value);
+                                    }
+                                })
+                            }),
+                        )
+                    }
+                    WidgetOption::Reset(reset) => kit::dropdown_row(
+                        k,
+                        &format!("taskbar-{widget_id}-reset"),
+                        crate::i18n::tr("taskbar-reset-time"),
+                        Some(crate::i18n::tr("taskbar-reset-time-description")),
+                        kit::options(&[
+                            crate::i18n::tr("taskbar-reset-off"),
+                            crate::i18n::tr("taskbar-reset-countdown"),
+                            crate::i18n::tr("taskbar-reset-clock"),
+                        ]),
+                        reset.index() as i32,
+                        false,
+                        Self::h(cx, move |this, choice: usize, _, cx| {
+                            let reset = TaskbarResetDisplay::ALL
+                                .get(choice)
+                                .copied()
+                                .unwrap_or_default();
+                            this.update_taskbar_widgets(cx, |widgets| {
+                                if let Some(widget) = widgets.get_mut(index) {
+                                    widget.reset = reset;
+                                }
+                            })
+                        }),
+                    ),
+                })
+                .collect()
+        }));
         let max = widget.style.max_indicators();
         body.push(dialog_section(
             k,
@@ -572,18 +738,26 @@ impl SettingsWindow {
             .accent()
             .full_width()
             .on_click(close.clone());
+        // The body scrolls once it outgrows the window; without this the
+        // flex column squeezes its sections (cards, the picker) to nothing
+        // instead.
+        let body = body
+            .into_iter()
+            .map(|section| div().flex_none().child(section).into_any_element())
+            .collect();
         Some(kit::dialog(
             k,
             format!("taskbar-dialog-{}", widget.id),
             phase,
-            640.0,
+            DIALOG_WIDTH,
             body,
             vec![remove.render(k), done.render(k)],
             Some(close),
         ))
     }
 
-    /// One tile per style, each previewing this widget drawn that way.
+    /// One tile per style, each previewing this widget drawn that way, in
+    /// rows of equal tiles. Previews wider than a tile scale down to fit.
     fn taskbar_style_picker(
         &mut self,
         k: &Kit,
@@ -592,6 +766,7 @@ impl SettingsWindow {
         window: &Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        let light = crate::taskbar::uses_light_theme();
         let tiles = TaskbarWidgetStyle::ALL
             .into_iter()
             .map(|style| {
@@ -599,11 +774,22 @@ impl SettingsWindow {
                 let mut variant = widget.clone();
                 variant.style = style;
                 variant.normalize();
-                let preview = self.taskbar_tile(
-                    format!("style-{}-{}", widget.id, style.index()),
-                    std::slice::from_ref(&variant),
-                    window,
-                );
+                let preview = self
+                    .taskbar_image(
+                        format!("style-{}-{}", widget.id, style.index()),
+                        std::slice::from_ref(&variant),
+                        window,
+                    )
+                    .map(|(image, (width, height))| {
+                        // Wide designs shrink to the tile. Sized here: GPUI's
+                        // object fit reads device pixels as DIPs.
+                        let room = STYLE_TILE - 2.0 - STYLE_PAD * 2.0 - PLATE_PAD * 2.0;
+                        let fit = (room / width).min(TASKBAR_HEIGHT / height).min(1.0);
+                        img(image)
+                            .w(px(width * fit))
+                            .h(px(height * fit))
+                            .flex_none()
+                    });
                 let id = format!("taskbar-style-{}", style.index());
                 let theme = &k.theme;
                 let rest = if selected {
@@ -614,16 +800,13 @@ impl SettingsWindow {
                 let hover = if selected { rest } else { theme.control_hover };
                 let tile = div()
                     .id(eid(id.clone()))
-                    .relative()
-                    .flex_1()
-                    .min_w_0()
+                    .w(px(STYLE_TILE))
+                    .flex_none()
                     .flex()
                     .flex_col()
-                    .items_center()
                     .gap(px(8.0))
-                    .pt(px(10.0))
-                    .pb(px(10.0))
-                    .px(px(6.0))
+                    .p(px(STYLE_PAD))
+                    .pb(px(8.0))
                     .rounded(px(kit::CARD_RADIUS))
                     .border_1()
                     .border_color(if selected {
@@ -631,20 +814,36 @@ impl SettingsWindow {
                     } else {
                         gpui::transparent_black()
                     })
-                    .overflow_hidden()
-                    .child(preview)
                     .child(
                         div()
+                            .w_full()
+                            .h(px(TASKBAR_HEIGHT))
+                            .flex_none()
+                            .px(px(PLATE_PAD))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded(px(6.0))
+                            .bg(taskbar_plate(light))
+                            .overflow_hidden()
+                            .children(preview),
+                    )
+                    .child(
+                        div()
+                            .w_full()
+                            .text_center()
                             .text_size(px(12.0))
                             .line_height(px(16.0))
                             .whitespace_nowrap()
+                            .overflow_hidden()
+                            .text_ellipsis()
                             .when(selected, |el| el.font_weight(FontWeight::SEMIBOLD))
                             .text_color(if selected {
                                 theme.accent_text
                             } else {
                                 theme.text
                             })
-                            .child(style_labels()[style.index()]),
+                            .child(style_label(style)),
                     );
                 kit::hover_bg(k, tile, kit::hover_key(&id), rest, hover)
                     .cursor_pointer()
@@ -658,11 +857,22 @@ impl SettingsWindow {
                     .into_any_element()
             })
             .collect::<Vec<_>>();
+        let mut rows = Vec::new();
+        let mut tiles = tiles.into_iter().peekable();
+        while tiles.peek().is_some() {
+            rows.push(
+                div()
+                    .flex()
+                    .gap(px(STYLE_GAP))
+                    .children(tiles.by_ref().take(STYLE_COLUMNS))
+                    .into_any_element(),
+            );
+        }
         div()
-            .grid()
-            .grid_cols(2)
-            .gap(px(8.0))
-            .children(tiles)
+            .flex()
+            .flex_col()
+            .gap(px(STYLE_GAP))
+            .children(rows)
             .into_any_element()
     }
 }

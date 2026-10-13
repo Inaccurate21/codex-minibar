@@ -10,7 +10,8 @@ use crate::{
     instances::ProviderId,
     limits::ProviderLimits,
     settings::{
-        LimitValue, TaskbarWidget, TaskbarWidgetStyle, TimeFormat, TrayColorMode, TrayIndicator,
+        LimitValue, TaskbarResetDisplay, TaskbarWidget, TaskbarWidgetStyle, TimeFormat,
+        TrayColorMode, TrayIndicator,
     },
 };
 
@@ -77,11 +78,16 @@ pub(crate) struct Icon {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Row {
     pub(crate) provider: ProviderId,
+    /// Short name for the taskbar: `5h`, `7d`, or the full name.
     pub(crate) label: String,
+    /// Full name for the hover card.
+    pub(crate) full_label: String,
     /// `42%`, or an em dash while no data has arrived.
     pub(crate) value: String,
     /// Fill fraction of the displayed value, 0..=1.
     pub(crate) progress: Option<f32>,
+    /// Where an even burn would put the fill, 0..=1.
+    pub(crate) pace: Option<f32>,
     /// Bar, ring and value tint.
     pub(crate) color: Rgb,
     /// Whether `color` is a real tint rather than the text color.
@@ -90,6 +96,8 @@ pub(crate) struct Row {
     pub(crate) icon: Icon,
     /// Remaining or used, for the hover card's wording.
     pub(crate) limit_value: LimitValue,
+    /// When the quota resets, as the widget is set to write it.
+    pub(crate) reset: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -99,19 +107,31 @@ pub(crate) struct WidgetView {
     pub(crate) icon: Option<Icon>,
     pub(crate) provider: Option<ProviderId>,
     pub(crate) rows: Vec<Row>,
+    pub(crate) show_labels: bool,
+    pub(crate) show_values: bool,
+    /// Marks the pace on the widget's graphics; the hover card always does.
+    pub(crate) show_pace: bool,
+    /// The hover card: each provider the widget reads, in full.
+    pub(crate) card: Vec<CardSection>,
+}
+
+/// One provider in the hover card: every quota it reports, not only the
+/// widget's, and what it used today.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct CardSection {
+    pub(crate) provider: ProviderId,
+    pub(crate) icon: Icon,
+    pub(crate) plan: Option<String>,
+    pub(crate) rows: Vec<Row>,
+    /// Today's tokens and their API value, or spend for pay-as-you-go
+    /// providers; `None` without usage statistics.
+    pub(crate) today: Option<String>,
 }
 
 impl WidgetView {
-    /// Secondary line of a single-indicator Glance: the label and, when
-    /// known, the time left until the window resets.
-    pub(crate) fn glance_caption(&self, now: DateTime<Utc>) -> String {
-        let Some(row) = self.rows.first() else {
-            return String::new();
-        };
-        match row.resets_at.filter(|reset| *reset > now) {
-            Some(reset) => format!("{} \u{00b7} {}", row.label, countdown(reset, now)),
-            None => row.label.clone(),
-        }
+    /// Whether anything is written beside or under the graphic.
+    pub(crate) fn has_text(&self) -> bool {
+        self.show_values || self.show_labels || self.rows.iter().any(|row| row.reset.is_some())
     }
 }
 
@@ -194,19 +214,28 @@ fn resolve_row(
     indicator: &TrayIndicator,
     limits: &ProviderLimits,
     appearance: Appearance,
+    now: DateTime<Utc>,
 ) -> Option<Row> {
     let provider = indicator.provider()?;
     let metric =
         crate::widget_data::resolve_metric(provider, limits.get(provider), &indicator.metric_id);
-    let label = metric
+    let registered = crate::provider_registry::metric(provider.kind(), &indicator.metric_id);
+    let full_label = metric
         .as_ref()
         .map(|metric| metric.label.clone())
-        .or_else(|| {
-            crate::provider_registry::metric(provider.kind(), &indicator.metric_id)
-                .map(|metric| metric.localized_label().to_owned())
-        })
+        .or_else(|| registered.map(|metric| metric.localized_label().to_owned()))
         .unwrap_or_else(|| indicator.metric_id.clone());
+    // Runtime names (a reserve standing in for the session) stay in full.
+    let label = match registered {
+        Some(metric) if full_label == metric.localized_label() => {
+            metric.localized_short_label().to_owned()
+        }
+        _ => full_label.clone(),
+    };
     let window = metric.map(|metric| metric.window).unwrap_or_default();
+    let pace = window
+        .pace_tip(indicator.limit_value == LimitValue::Used, now)
+        .map(|tip| (tip.percent / 100.0) as f32);
     let remaining = window.remaining_percent();
     let displayed = match indicator.limit_value {
         LimitValue::Remaining => remaining,
@@ -216,6 +245,8 @@ fn resolve_row(
     Some(Row {
         provider,
         label,
+        full_label,
+        pace,
         value: displayed.map_or_else(|| "\u{2014}".to_owned(), |value| format!("{value}%")),
         progress: displayed.map(|value| f32::from(value) / 100.0),
         color,
@@ -223,6 +254,7 @@ fn resolve_row(
         resets_at: window.resets_at,
         icon: icon_for(provider, appearance),
         limit_value: indicator.limit_value,
+        reset: None,
     })
 }
 
@@ -231,12 +263,29 @@ pub(crate) fn resolve(
     limits: &ProviderLimits,
     appearance: Appearance,
 ) -> WidgetView {
-    let rows = widget
+    let now = Utc::now();
+    let style = widget.style;
+    let reset = if style.has_reset() {
+        widget.reset
+    } else {
+        TaskbarResetDisplay::Off
+    };
+    let mut rows = widget
         .indicators
         .iter()
-        .take(widget.style.max_indicators())
-        .filter_map(|indicator| resolve_row(indicator, limits, appearance))
+        .take(style.max_indicators())
+        .filter_map(|indicator| resolve_row(indicator, limits, appearance, now))
         .collect::<Vec<_>>();
+    for row in &mut rows {
+        row.reset = row
+            .resets_at
+            .filter(|at| *at > now)
+            .and_then(|at| match reset {
+                TaskbarResetDisplay::Off => None,
+                TaskbarResetDisplay::Countdown => Some(countdown(at, now)),
+                TaskbarResetDisplay::Clock => Some(reset_clock(at)),
+            });
+    }
     let provider = widget.provider();
     let icon = widget
         .show_icon
@@ -244,11 +293,119 @@ pub(crate) fn resolve(
         .flatten();
     WidgetView {
         id: widget.id.clone(),
-        style: widget.style,
+        style,
         icon,
         provider,
         rows,
+        show_labels: widget.show_labels && style.has_labels(),
+        // Text designs always say something: the percentage, unless the
+        // reset time stands in for it.
+        show_values: widget.show_values
+            || (!style.has_graphic() && reset == TaskbarResetDisplay::Off),
+        show_pace: widget.show_pace,
+        card: card_sections(widget, limits, appearance, now),
     }
+}
+
+/// Every provider the widget reads, each with all of its quotas. Quotas the
+/// widget shows keep its colors and remaining/used choice.
+fn card_sections(
+    widget: &TaskbarWidget,
+    limits: &ProviderLimits,
+    appearance: Appearance,
+    now: DateTime<Utc>,
+) -> Vec<CardSection> {
+    let mut providers = Vec::new();
+    for provider in widget.indicators.iter().filter_map(TrayIndicator::provider) {
+        if !providers.contains(&provider) {
+            providers.push(provider);
+        }
+    }
+    providers
+        .into_iter()
+        .map(|provider| {
+            let configured = widget
+                .indicators
+                .iter()
+                .filter(|indicator| indicator.provider() == Some(provider))
+                .collect::<Vec<_>>();
+            let limit_value = configured
+                .first()
+                .map_or(LimitValue::Remaining, |indicator| indicator.limit_value);
+            // A metric without data of its own can resolve to another one
+            // (a reserve falling back to the session); list each quota once.
+            let mut seen = Vec::new();
+            let rows = crate::widget_data::snapshot(provider, limits)
+                .metrics
+                .into_iter()
+                .filter(|metric| {
+                    let resolved = crate::widget_data::resolve_metric(
+                        provider,
+                        limits.get(provider),
+                        &metric.id,
+                    )
+                    .map_or_else(|| metric.id.clone(), |resolved| resolved.resolved_id);
+                    let fresh = !seen.contains(&resolved) && !seen.contains(&metric.label);
+                    seen.push(resolved);
+                    seen.push(metric.label.clone());
+                    fresh
+                })
+                .filter_map(|metric| {
+                    let indicator = configured
+                        .iter()
+                        .find(|indicator| indicator.metric_id == metric.id)
+                        .map(|indicator| (*indicator).clone())
+                        .unwrap_or_else(|| TrayIndicator {
+                            limit_value,
+                            ..TrayIndicator::new(provider, metric.id)
+                        });
+                    resolve_row(&indicator, limits, appearance, now)
+                })
+                .collect();
+            let provider_limits = limits.get(provider);
+            CardSection {
+                provider,
+                icon: icon_for(provider, appearance),
+                plan: provider_limits
+                    .plan_type
+                    .as_deref()
+                    .filter(|plan| !plan.trim().is_empty())
+                    .map(crate::popup_window::capitalize_plan_name),
+                rows,
+                today: today_usage(provider, &provider_limits.usage),
+            }
+        })
+        .collect()
+}
+
+/// `1.2M tokens · ≈ $3.40`, or `$1.23 · 45 requests` for providers billed
+/// per request.
+fn today_usage(provider: ProviderId, usage: &crate::usage::UsageStatistics) -> Option<String> {
+    if !usage.has_data() {
+        return None;
+    }
+    let today = &usage.today;
+    if crate::popup_window::ui::is_cost_provider(provider.kind()) {
+        return Some(format!(
+            "{} \u{00b7} {}",
+            crate::popup_window::format_usd(today.estimated_cost_microusd as f64 / 1e6),
+            crate::i18n::format("requests", &[("v0", today.requests.to_string())]),
+        ));
+    }
+    let tokens = crate::i18n::format(
+        "taskbar-card-tokens",
+        &[(
+            "count",
+            crate::popup_window::format_token_count(today.total_tokens()),
+        )],
+    );
+    Some(match today.estimated_api_value_usd() {
+        Some(value) => format!(
+            "{tokens} \u{00b7} \u{2248} {}",
+            crate::popup_window::format_usd(value)
+        ),
+        None => tokens,
+    })
 }
 
 /// Widgets that have at least one enabled instance, resolved in order.
@@ -381,6 +538,109 @@ mod tests {
             resolve_visible(&widgets, &[provider], &limits(0, 0), appearance(false)).len(),
             1
         );
+    }
+
+    #[test]
+    fn standard_windows_get_short_labels_and_a_pace() {
+        let widget = TaskbarWidget::for_provider(ProviderId::primary(ProviderKind::Codex));
+        let view = resolve(&widget, &limits(58, 5), appearance(false));
+        assert_eq!(view.rows[0].label, crate::i18n::tr("short-5h"));
+        assert_eq!(view.rows[1].label, crate::i18n::tr("short-7d"));
+        assert_eq!(view.rows[0].full_label, crate::i18n::tr("msg-5h-session"));
+        // 167 of 300 minutes gone: an even burn leaves about 44 % now.
+        let pace = view.rows[0].pace.expect("the session has a pace");
+        assert!((pace - 0.443).abs() < 0.01, "{pace}");
+        assert!(view.show_pace);
+    }
+
+    #[test]
+    fn reset_time_follows_the_widget_setting() {
+        let provider = ProviderId::primary(ProviderKind::Codex);
+        let mut widget = TaskbarWidget::for_provider(provider);
+        let view = resolve(&widget, &limits(10, 0), appearance(false));
+        assert!(
+            view.rows[0]
+                .reset
+                .as_deref()
+                .is_some_and(|left| left.starts_with("2h"))
+        );
+        widget.reset = TaskbarResetDisplay::Clock;
+        let view = resolve(&widget, &limits(10, 0), appearance(false));
+        assert!(
+            view.rows[0]
+                .reset
+                .as_deref()
+                .is_some_and(|clock| clock.contains(':'))
+        );
+        widget.reset = TaskbarResetDisplay::Off;
+        widget.show_values = false;
+        let view = resolve(&widget, &limits(10, 0), appearance(false));
+        assert!(view.rows[0].reset.is_none());
+        // A Glance with nothing else to say keeps its percentages.
+        assert!(view.show_values);
+        widget.style = TaskbarWidgetStyle::Rings;
+        let view = resolve(&widget, &limits(10, 0), appearance(false));
+        assert!(!view.show_values);
+        assert!(view.has_text(), "labels still show");
+        widget.show_labels = false;
+        let view = resolve(&widget, &limits(10, 0), appearance(false));
+        assert!(!view.has_text());
+    }
+
+    #[test]
+    fn hover_card_shows_every_quota_and_today() {
+        let codex = ProviderId::primary(ProviderKind::Codex);
+        let mut widget = TaskbarWidget::for_provider(codex);
+        // The widget shows only the weekly quota, used.
+        widget.indicators = vec![TrayIndicator {
+            limit_value: LimitValue::Used,
+            ..TrayIndicator::new(codex, "codex.weekly")
+        }];
+        let mut limits = limits(58, 5);
+        let usage = crate::usage::TokenUsage {
+            input_tokens: 1_000_000,
+            output_tokens: 200_000,
+            requests: 12,
+            ..Default::default()
+        };
+        limits.get_mut(codex).usage = crate::usage::UsageStatistics {
+            today: usage.clone(),
+            history: usage,
+            ..Default::default()
+        };
+        let view = resolve(&widget, &limits, appearance(false));
+        assert_eq!(view.rows.len(), 1);
+        let [section] = view.card.as_slice() else {
+            panic!("one provider");
+        };
+        assert!(section.rows.len() >= 2, "session and weekly");
+        let mut labels = section
+            .rows
+            .iter()
+            .map(|row| row.full_label.clone())
+            .collect::<Vec<_>>();
+        labels.dedup();
+        assert_eq!(labels.len(), section.rows.len(), "each quota once: {labels:?}");
+        let weekly = section
+            .rows
+            .iter()
+            .find(|row| row.label == crate::i18n::tr("short-7d"))
+            .expect("weekly row");
+        assert_eq!(weekly.value, "5%", "keeps the widget's used choice");
+        let session = &section.rows[0];
+        assert_eq!(session.value, "58%", "the others follow it");
+        assert!(
+            section
+                .today
+                .as_deref()
+                .is_some_and(|today| today.contains("1.2M"))
+        );
+    }
+
+    #[test]
+    fn retired_compact_style_reads_as_glance() {
+        let widget: TaskbarWidget = toml::from_str("style = \"compact\"").unwrap();
+        assert_eq!(widget.style, TaskbarWidgetStyle::Glance);
     }
 
     #[test]

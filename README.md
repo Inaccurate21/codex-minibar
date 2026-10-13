@@ -105,8 +105,9 @@ See spending per key and manage OpenRouter API keys from the popup's OpenRouter 
 - Configurable tray icons: numbers, bars, rings, reset times or reset countdowns, showing
   remaining or used percentage. Use several icons for several providers.
 - Taskbar widgets drawn inside the Windows taskbar beside the clock, in the taskbar's own style:
-  a weather-button glance, progress rings, bars or clock-like text. Hover one for a flyout with
-  every quota and its reset time; click it to open the popup on that provider.
+  a weather-button glance, progress rings, nested rings, dials, bars or level
+  meters, with a pace mark on the graphics. Hover one for a flyout with every quota and its reset
+  time; click it to open the popup on Home or that provider's tab, at that end of the taskbar.
 - Ongoing Codex, Claude and Cursor incidents from their public status pages, with an optional
   notification when a new incident starts. Only components that affect each provider's coding
   tools count.

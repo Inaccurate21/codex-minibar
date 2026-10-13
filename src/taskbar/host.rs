@@ -35,14 +35,15 @@ use windows_sys::Win32::{
             AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu,
             DestroyWindow, DispatchMessageW, FindWindowExW, FindWindowW, GW_CHILD, GWL_STYLE,
             GetClientRect, GetCursorPos, GetMessageW, GetWindow, GetWindowRect, HMENU,
-            HWND_MESSAGE, HWND_TOP, IDC_ARROW, IsWindow, KillTimer, LoadCursorW, MF_SEPARATOR,
-            MF_STRING, MSG, PostMessageW, RegisterClassW, SW_SHOWNA, SWP_NOACTIVATE, SWP_NOMOVE,
-            SWP_NOSIZE, SWP_NOZORDER, SetForegroundWindow, SetParent, SetTimer, SetWindowLongPtrW,
-            SetWindowPos, ShowWindow, TPM_BOTTOMALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON,
-            TrackPopupMenuEx, TranslateMessage, ULW_ALPHA, UpdateLayeredWindow, WM_APP,
-            WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_RBUTTONUP, WM_TIMER, WNDCLASSW,
-            WS_CHILD, WS_CLIPSIBLINGS, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
-            WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
+            HWND_MESSAGE, HWND_TOP, IDC_ARROW, IsWindow, KillTimer, LoadCursorW, MF_GRAYED,
+            MF_SEPARATOR, MF_STRING, MSG, PostMessageW, RegisterClassW, SW_SHOWNA, SWP_NOACTIVATE,
+            SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SetForegroundWindow, SetParent, SetTimer,
+            SetWindowLongPtrW, SetWindowPos, ShowWindow, TPM_BOTTOMALIGN, TPM_LEFTALIGN,
+            TPM_RETURNCMD, TPM_RIGHTALIGN, TPM_RIGHTBUTTON, TPM_TOPALIGN, TrackPopupMenuEx,
+            TranslateMessage, ULW_ALPHA, UpdateLayeredWindow, WM_APP, WM_LBUTTONDOWN, WM_LBUTTONUP,
+            WM_MOUSEMOVE, WM_RBUTTONUP, WM_TIMER, WNDCLASSW, WS_CHILD, WS_CLIPSIBLINGS,
+            WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT,
+            WS_POPUP,
         },
     },
 };
@@ -62,6 +63,9 @@ pub(super) enum Message {
 
 const WM_WAKE: u32 = WM_APP + 1;
 const WM_MOUSELEAVE: u32 = 0x02A3;
+const WM_MOUSEWHEEL: u32 = 0x020A;
+/// One wheel notch.
+const WHEEL_DELTA: i32 = 120;
 const TIMER_POLL: usize = 1;
 const TIMER_FRAME: usize = 2;
 const TIMER_CARD: usize = 3;
@@ -75,6 +79,10 @@ const FRAME: u32 = 15;
 const MENU_OPEN: usize = 1;
 const MENU_SETTINGS: usize = 2;
 const MENU_HIDE: usize = 3;
+const MENU_EDIT: usize = 4;
+const MENU_UPDATE: usize = 5;
+const MENU_APP_SETTINGS: usize = 6;
+const MENU_EXIT: usize = 7;
 
 /// Space between the strip and its anchor, in DIPs.
 const TRAY_MARGIN: f32 = 2.0;
@@ -246,8 +254,8 @@ unsafe extern "system" fn widget_proc(
 ) -> LRESULT {
     match message {
         WM_MOUSEMOVE => {
-            let (x, _) = point_from(lparam);
-            let track = with_host(|host| host.mouse_move(x)).unwrap_or(false);
+            let point = point_from(lparam);
+            let track = with_host(|host| host.mouse_move(point)).unwrap_or(false);
             if track {
                 let mut event = TRACKMOUSEEVENT {
                     cbSize: size_of::<TRACKMOUSEEVENT>() as u32,
@@ -259,29 +267,47 @@ unsafe extern "system" fn widget_proc(
             }
             0
         }
+        WM_MOUSEWHEEL => {
+            let delta = ((wparam >> 16) & 0xFFFF) as u16 as i16;
+            with_host(|host| host.scroll(i32::from(delta)));
+            0
+        }
         WM_MOUSELEAVE => {
             with_host(Host::mouse_leave);
             0
         }
         WM_LBUTTONDOWN => {
-            let (x, _) = point_from(lparam);
-            if with_host(|host| host.press(x)).unwrap_or(false) {
+            let point = point_from(lparam);
+            if with_host(|host| host.press(point)).unwrap_or(false) {
                 unsafe { SetCapture(hwnd) };
             }
             0
         }
         WM_LBUTTONUP => {
-            let (x, _) = point_from(lparam);
+            let point = point_from(lparam);
             unsafe { ReleaseCapture() };
-            if let Some(Some(action)) = with_host(|host| host.release(x)) {
+            if let Some(Some(action)) = with_host(|host| host.release(point)) {
                 super::post_action(action);
             }
             0
         }
         WM_RBUTTONUP => {
+            let point = point_from(lparam);
             with_host(Host::close_card);
-            let light = with_host(|host| host.appearance.light).unwrap_or(false);
-            if let Some(action) = context_menu(hwnd, light) {
+            let target = with_host(|host| MenuTarget {
+                page: host.click_page(),
+                light: host.appearance.light,
+                edge: host.geometry.map_or(Edge::Bottom, |geometry| geometry.edge),
+                widget: host.hit(point).and_then(|id| {
+                    host.slots
+                        .iter()
+                        .find(|slot| slot.view.id == id)
+                        .map(|slot| (id, slot.view.provider))
+                }),
+            });
+            if let Some(target) = target
+                && let Some(action) = context_menu(hwnd, target)
+            {
                 super::post_action(action);
             }
             0
@@ -290,48 +316,85 @@ unsafe extern "system" fn widget_proc(
     }
 }
 
-/// Native context menu, themed to match the taskbar rather than the app.
-fn context_menu(owner: HWND, light: bool) -> Option<Action> {
+/// What a right click landed on.
+struct MenuTarget {
+    page: crate::settings::TaskbarClick,
+    light: bool,
+    edge: Edge,
+    /// The widget under the pointer and its provider.
+    widget: Option<(String, Option<crate::instances::ProviderId>)>,
+}
+
+/// The tray icon's menu with the widget's own commands on top, as a native
+/// menu themed to match the taskbar rather than the app.
+fn context_menu(owner: HWND, target: MenuTarget) -> Option<Action> {
     unsafe {
-        theme_menus(owner, light);
+        theme_menus(owner, target.light);
         let menu: HMENU = CreatePopupMenu();
         if menu.is_null() {
             return None;
         }
-        let open = wide(crate::i18n::tr("taskbar-menu-open"));
-        let settings = wide(crate::i18n::tr("taskbar-menu-settings"));
-        let hide = wide(crate::i18n::tr("taskbar-menu-hide"));
-        AppendMenuW(menu, MF_STRING, MENU_OPEN, open.as_ptr());
-        AppendMenuW(menu, MF_STRING, MENU_SETTINGS, settings.as_ptr());
+        let append = |flags, id: usize, text: &str| {
+            let text = wide(text);
+            AppendMenuW(menu, flags, id, text.as_ptr());
+        };
+        let header = format!("Codex Minibar - {}", env!("CARGO_PKG_VERSION"));
+        append(MF_STRING | MF_GRAYED, 0, &header);
         AppendMenuW(menu, MF_SEPARATOR, 0, null_mut());
-        AppendMenuW(menu, MF_STRING, MENU_HIDE, hide.as_ptr());
+        if target.widget.is_some() {
+            append(MF_STRING, MENU_OPEN, crate::i18n::tr("taskbar-menu-open"));
+            append(MF_STRING, MENU_EDIT, crate::i18n::tr("taskbar-menu-edit"));
+        }
+        append(
+            MF_STRING,
+            MENU_SETTINGS,
+            crate::i18n::tr("taskbar-menu-settings"),
+        );
+        append(MF_STRING, MENU_HIDE, crate::i18n::tr("taskbar-menu-hide"));
+        AppendMenuW(menu, MF_SEPARATOR, 0, null_mut());
+        if super::update_available() {
+            append(
+                MF_STRING,
+                MENU_UPDATE,
+                crate::i18n::tr("update-available-67fd3a"),
+            );
+        }
+        append(MF_STRING, MENU_APP_SETTINGS, crate::i18n::tr("settings"));
+        append(MF_STRING, MENU_EXIT, crate::i18n::tr("exit"));
         let mut cursor = POINT { x: 0, y: 0 };
         GetCursorPos(&mut cursor);
         // The menu dismisses on an outside click only while its owner's
         // top-level window is in the foreground.
         SetForegroundWindow(owner);
+        // Opens away from the taskbar, like Explorer's own menus.
+        let align = match target.edge {
+            Edge::Bottom => TPM_BOTTOMALIGN,
+            Edge::Top => TPM_TOPALIGN,
+            Edge::Left => TPM_LEFTALIGN,
+            Edge::Right => TPM_RIGHTALIGN,
+        };
         let command = TrackPopupMenuEx(
             menu,
-            TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_BOTTOMALIGN,
+            TPM_RETURNCMD | TPM_RIGHTBUTTON | align,
             cursor.x,
             cursor.y,
             owner,
             null_mut(),
         );
         DestroyMenu(menu);
+        let (id, provider) = target.widget.unzip();
         match command as usize {
             MENU_OPEN => Some(Action::Open {
-                provider: with_host(|host| {
-                    host.slots
-                        .iter()
-                        .find(|slot| !slot.leaving)
-                        .and_then(|slot| slot.view.provider)
-                })
-                .flatten(),
+                provider: provider.flatten(),
                 anchor: (cursor.x, cursor.y),
+                page: target.page,
             }),
+            MENU_EDIT => id.map(Action::Edit),
             MENU_SETTINGS => Some(Action::Settings),
             MENU_HIDE => Some(Action::Hide),
+            MENU_UPDATE => Some(Action::Update),
+            MENU_APP_SETTINGS => Some(Action::AppSettings),
+            MENU_EXIT => Some(Action::Exit),
             _ => None,
         }
     }
@@ -437,17 +500,50 @@ impl Slot {
     }
 }
 
+/// The screen edge the taskbar is docked to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Edge {
+    Bottom,
+    Top,
+    Left,
+    Right,
+}
+
+impl Edge {
+    fn vertical(self) -> bool {
+        matches!(self, Self::Left | Self::Right)
+    }
+}
+
+/// Where the strip lives. "Along" is the taskbar's long axis: x on a
+/// horizontal taskbar, y on a vertical one.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Geometry {
     taskbar: HWND,
     scale: f32,
-    height: i32,
-    /// Right edge (tray) or left edge (start) of the strip, in taskbar
-    /// client pixels.
+    edge: Edge,
+    /// Taskbar client extent across its long axis, in pixels.
+    thickness: i32,
+    /// End (tray) or start (start) of the strip along the taskbar, in
+    /// taskbar client pixels.
     anchor: i32,
+    /// Where the Start button ends along the taskbar, on shells that have
+    /// a Win32 one.
+    start_button: Option<i32>,
     alignment: TaskbarAlignment,
-    /// Screen x of the taskbar's client origin.
-    origin: i32,
+    /// Screen position of the taskbar's client origin.
+    origin: (i32, i32),
+}
+
+impl Geometry {
+    /// A screen rectangle's extent along the taskbar, in client pixels.
+    fn along(self, bounds: super::obstacles::Bounds) -> (i32, i32) {
+        if self.edge.vertical() {
+            (bounds.1 - self.origin.1, bounds.3 - self.origin.1)
+        } else {
+            (bounds.0 - self.origin.0, bounds.2 - self.origin.0)
+        }
+    }
 }
 
 struct Surface {
@@ -520,7 +616,7 @@ struct Host {
     card: Option<Card>,
     /// Explorer's buttons as last measured.
     obstacles: Option<Obstacles>,
-    /// Left edge of a start-aligned strip, past the widgets button.
+    /// Start of a start-aligned strip, past the widgets button.
     leading: i32,
     /// Since when a first show waits for Explorer's buttons to be measured.
     awaiting_obstacles: Option<Instant>,
@@ -534,11 +630,18 @@ struct Host {
     appearance: Appearance,
     slots: Vec<Slot>,
     hover: Option<String>,
+    /// Every widget the wheel cycles through, in order, while cycling.
+    cycle_ids: Vec<String>,
+    /// The widget shown while cycling.
+    cycled: Option<String>,
+    /// Wheel travel not yet turned into a step.
+    wheel: i32,
     pressed: Option<String>,
     tracking: bool,
     frame_timer: bool,
     minute: i64,
-    /// Widget id, x and width in DIPs of the last frame, for hit testing.
+    /// Widget id, offset and length along the taskbar in DIPs of the last
+    /// frame, for hit testing.
     hits: Vec<(String, f32, f32)>,
     placed: Option<(i32, i32, i32, i32)>,
     shown: bool,
@@ -561,6 +664,9 @@ impl Host {
             appearance: current_appearance(false),
             slots: Vec::new(),
             hover: None,
+            cycle_ids: Vec::new(),
+            cycled: None,
+            wheel: 0,
             pressed: None,
             tracking: false,
             frame_timer: false,
@@ -655,6 +761,7 @@ impl Host {
             ),
             _ => Vec::new(),
         };
+        let views = self.cycle(views);
         #[cfg(debug_assertions)]
         trace(format!(
             "reconcile: enabled={enabled} geometry={:?} views={}",
@@ -688,11 +795,10 @@ impl Host {
         }
         let metrics = metrics_for(geometry);
         let animate = self.animate() && self.shown;
-        let stamp = Utc::now();
         let mut widths = Vec::with_capacity(views.len());
         if let Some(renderer) = self.renderer.as_mut() {
             for view in &views {
-                widths.push(renderer.measure(view, metrics, stamp).unwrap_or(0.0));
+                widths.push(renderer.measure(view, metrics).unwrap_or(0.0));
             }
         }
         super::obstacles::set_wanted(!views.is_empty());
@@ -796,6 +902,68 @@ impl Host {
             self.hover = None;
         }
         self.render();
+    }
+
+    fn click_page(&self) -> crate::settings::TaskbarClick {
+        self.config
+            .as_ref()
+            .map(|config| config.taskbar.click)
+            .unwrap_or_default()
+    }
+
+    /// Narrows `views` to the one being shown while cycling is on.
+    fn cycle(&mut self, views: Vec<WidgetView>) -> Vec<WidgetView> {
+        let cycling = self
+            .config
+            .as_ref()
+            .is_some_and(|config| config.taskbar.cycle);
+        if !cycling || views.len() < 2 {
+            self.cycle_ids.clear();
+            return views;
+        }
+        self.cycle_ids = views.iter().map(|view| view.id.clone()).collect();
+        let index = self
+            .cycled
+            .as_ref()
+            .and_then(|id| self.cycle_ids.iter().position(|shown| shown == id))
+            .unwrap_or(0);
+        self.cycled = Some(self.cycle_ids[index].clone());
+        views.into_iter().skip(index).take(1).collect()
+    }
+
+    /// Scroll wheel over the strip: steps through the widgets while cycling,
+    /// down or toward the user for the next one.
+    fn scroll(&mut self, delta: i32) {
+        if self.cycle_ids.len() < 2 {
+            self.wheel = 0;
+            return;
+        }
+        self.wheel += delta;
+        let steps = self.wheel / WHEEL_DELTA;
+        if steps == 0 {
+            return;
+        }
+        self.wheel -= steps * WHEEL_DELTA;
+        let count = self.cycle_ids.len() as i32;
+        let current = self
+            .cycled
+            .as_ref()
+            .and_then(|id| self.cycle_ids.iter().position(|shown| shown == id))
+            .unwrap_or(0) as i32;
+        // A wheel notch away from the user is positive: go back.
+        let next = (current - steps).rem_euclid(count) as usize;
+        let id = self.cycle_ids[next].clone();
+        self.cycled = Some(id.clone());
+        let hovered = self.hover.is_some();
+        let card_open = self.card.as_ref().is_some_and(|card| !card.closing);
+        self.reconcile();
+        if hovered {
+            self.set_hover(Some(id));
+            if card_open {
+                // The open card follows at once to the widget now shown.
+                self.open_card();
+            }
+        }
     }
 
     fn teardown(&mut self) {
@@ -954,31 +1122,39 @@ impl Host {
             }
             return;
         }
-        let width = (total * metrics.scale).ceil() as i32;
-        let height = geometry.height;
-        let rect = match geometry.alignment {
+        let length = (total * metrics.scale).ceil() as i32;
+        let start = match geometry.alignment {
             TaskbarAlignment::Tray => {
-                let right = geometry.anchor - (TRAY_MARGIN * metrics.scale).round() as i32;
-                RECT {
-                    left: right - width,
-                    top: 0,
-                    right,
-                    bottom: height,
-                }
+                geometry.anchor - (TRAY_MARGIN * metrics.scale).round() as i32 - length
             }
-            TaskbarAlignment::Start => {
-                let left = self.leading;
-                RECT {
-                    left,
-                    top: 0,
-                    right: left + width,
-                    bottom: height,
-                }
-            }
+            TaskbarAlignment::Start => self.leading,
         };
-        // Tray alignment grows leftward: content keeps its right edge.
+        let (rect, width, height) = if geometry.edge.vertical() {
+            (
+                RECT {
+                    left: 0,
+                    top: start,
+                    right: geometry.thickness,
+                    bottom: start + length,
+                },
+                geometry.thickness,
+                length,
+            )
+        } else {
+            (
+                RECT {
+                    left: start,
+                    top: 0,
+                    right: start + length,
+                    bottom: geometry.thickness,
+                },
+                length,
+                geometry.thickness,
+            )
+        };
+        // Tray alignment grows toward the start: content keeps its far end.
         let shift = match geometry.alignment {
-            TaskbarAlignment::Tray => (width as f32 / metrics.scale - total).max(0.0),
+            TaskbarAlignment::Tray => (length as f32 / metrics.scale - total).max(0.0),
             TaskbarAlignment::Start => 0.0,
         };
         if !self.ensure_window(geometry, rect) {
@@ -1009,10 +1185,10 @@ impl Host {
             .iter()
             .zip(&placed)
             .zip(&progress)
-            .map(|((slot, x), progress)| Item {
+            .map(|((slot, offset), progress)| Item {
                 view: &slot.view,
-                x: x + shift,
-                width: slot.width.value(now).max(0.0),
+                offset: offset + shift,
+                length: slot.width.value(now).max(0.0),
                 hover: slot.hover.value(now),
                 press: slot.press.value(now),
                 opacity: slot.opacity.value(now),
@@ -1028,7 +1204,6 @@ impl Host {
             metrics,
             self.appearance,
             &items,
-            Utc::now(),
         ) {
             trace(format!("Taskbar widget paint failed: {error}"));
             return;
@@ -1097,14 +1272,19 @@ impl Host {
         }
     }
 
-    fn hit(&self, x: i32) -> Option<String> {
-        let scale = self.geometry?.scale;
-        let x = x as f32 / scale;
+    fn hit(&self, point: (i32, i32)) -> Option<String> {
+        let geometry = self.geometry?;
+        let along = if geometry.edge.vertical() {
+            point.1
+        } else {
+            point.0
+        } as f32
+            / geometry.scale;
         self.hits
             .iter()
-            .find(|(id, left, width)| {
-                x >= *left
-                    && x < left + width
+            .find(|(id, start, length)| {
+                along >= *start
+                    && along < start + length
                     && self
                         .slots
                         .iter()
@@ -1245,7 +1425,7 @@ impl Host {
             self.card = None;
             return;
         };
-        let Some(&(_, hit_x, hit_width)) = self.hits.iter().find(|(id, _, _)| *id == card.id)
+        let Some(&(_, hit_start, hit_length)) = self.hits.iter().find(|(id, _, _)| *id == card.id)
         else {
             return;
         };
@@ -1265,25 +1445,35 @@ impl Host {
         let monitor = monitor_bounds(geometry.taskbar);
         let margin = (CARD_MARGIN * scale).round() as i32;
         let gap = (CARD_GAP * scale).round() as i32;
-        let center = strip.left + ((hit_x + hit_width / 2.0) * scale).round() as i32;
+        let middle = ((hit_start + hit_length / 2.0) * scale).round() as i32;
         let edge = (8.0 * scale).round() as i32;
-        let left = (center - width / 2)
-            .min(monitor.right - edge - width + margin)
-            .max(monitor.left + edge - margin);
-        // Above a bottom taskbar, below a top one.
-        let below = strip.top < (monitor.top + monitor.bottom) / 2;
-        let top = if below {
-            strip.bottom + gap - margin
-        } else {
-            strip.top - gap - height + margin
-        };
         let opacity = card.opacity.value(now);
-        let rise = if below { -1.0 } else { 1.0 } * CARD_RISE * (1.0 - opacity);
-        let progress = slot
-            .progress
-            .iter()
-            .map(|tween| tween.map(|tween| tween.value(now)))
-            .collect::<Vec<_>>();
+        // The card rises out of the taskbar: up from a bottom one, down from
+        // a top one, sideways from a vertical one.
+        let travel = CARD_RISE * (1.0 - opacity);
+        let slide = (travel * scale).round() as i32;
+        let (left, top, rise) = match geometry.edge {
+            Edge::Bottom | Edge::Top => {
+                let left = (strip.left + middle - width / 2)
+                    .min(monitor.right - edge - width + margin)
+                    .max(monitor.left + edge - margin);
+                if geometry.edge == Edge::Top {
+                    (left, strip.bottom + gap - margin, -travel)
+                } else {
+                    (left, strip.top - gap - height + margin, travel)
+                }
+            }
+            Edge::Left | Edge::Right => {
+                let top = (strip.top + middle - height / 2)
+                    .min(monitor.bottom - edge - height + margin)
+                    .max(monitor.top + edge - margin);
+                if geometry.edge == Edge::Left {
+                    (strip.right + gap - margin - slide, top, 0.0)
+                } else {
+                    (strip.left - gap - width + margin + slide, top, 0.0)
+                }
+            }
+        };
         let view = slot.view.clone();
         let appearance = self.appearance;
         let Some(card) = self.card.as_mut() else {
@@ -1309,7 +1499,6 @@ impl Host {
                 scale,
                 appearance,
                 &view,
-                &progress,
                 opacity,
                 rise,
                 stamp,
@@ -1352,8 +1541,8 @@ impl Host {
     }
 
     /// Returns whether leave tracking must be requested.
-    fn mouse_move(&mut self, x: i32) -> bool {
-        let id = self.hit(x);
+    fn mouse_move(&mut self, point: (i32, i32)) -> bool {
+        let id = self.hit(point);
         self.set_hover(id);
         let track = !self.tracking;
         self.tracking = true;
@@ -1377,8 +1566,8 @@ impl Host {
         self.render();
     }
 
-    fn press(&mut self, x: i32) -> bool {
-        let Some(id) = self.hit(x) else {
+    fn press(&mut self, point: (i32, i32)) -> bool {
+        let Some(id) = self.hit(point) else {
             return false;
         };
         self.close_card();
@@ -1387,10 +1576,10 @@ impl Host {
         true
     }
 
-    fn release(&mut self, x: i32) -> Option<Action> {
+    fn release(&mut self, point: (i32, i32)) -> Option<Action> {
         let pressed = self.pressed.take()?;
         self.set_press(None);
-        let over = self.hit(x);
+        let over = self.hit(point);
         if over.as_ref() != Some(&pressed) {
             self.set_hover(over);
             return None;
@@ -1405,6 +1594,7 @@ impl Host {
         Some(Action::Open {
             provider,
             anchor: (cursor.x, cursor.y),
+            page: self.click_page(),
         })
     }
 }
@@ -1420,28 +1610,30 @@ const OBSTACLE_GAP: f32 = 8.0;
 fn free_span(geometry: Geometry, obstacles: Option<Obstacles>) -> (i32, f32) {
     let scale = geometry.scale;
     let gap = (OBSTACLE_GAP * scale).round() as i32;
-    let cluster = obstacles.and_then(|obstacles| obstacles.cluster);
-    let to_client = |x: i32| x - geometry.origin;
+    let cluster = obstacles
+        .and_then(|obstacles| obstacles.cluster)
+        .map(|bounds| geometry.along(bounds));
     match geometry.alignment {
         TaskbarAlignment::Tray => {
-            let right = geometry.anchor - (TRAY_MARGIN * scale).round() as i32;
-            let left = cluster
-                .map(|(_, right)| to_client(right) + gap)
-                .filter(|left| *left < right)
+            let end = geometry.anchor - (TRAY_MARGIN * scale).round() as i32;
+            let start = cluster
+                .map(|(_, end)| end + gap)
+                .filter(|start| *start < end)
                 .unwrap_or(i32::MIN / 2);
-            (0, (right - left).max(0) as f32)
+            (0, (end - start).max(0) as f32)
         }
         TaskbarAlignment::Start => {
             let leading = obstacles
-                .and_then(|obstacles| obstacles.widgets_right)
-                .map(to_client)
-                .unwrap_or(geometry.anchor)
-                .max(geometry.anchor)
+                .and_then(|obstacles| obstacles.widgets)
+                .map(|bounds| geometry.along(bounds).1)
+                .into_iter()
+                .chain(geometry.start_button)
+                .fold(geometry.anchor, i32::max)
                 + (START_MARGIN * scale).round() as i32;
-            let right = cluster
-                .map(|(left, _)| to_client(left) - gap)
+            let end = cluster
+                .map(|(start, _)| start - gap)
                 .unwrap_or(i32::MAX / 2);
-            (leading, (right - leading).max(0) as f32)
+            (leading, (end - leading).max(0) as f32)
         }
     }
 }
@@ -1497,12 +1689,37 @@ fn current_appearance(colored_icons: bool) -> Appearance {
 fn metrics_for(geometry: Geometry) -> Metrics {
     Metrics {
         scale: geometry.scale,
-        height: geometry.height as f32 / geometry.scale,
+        thickness: geometry.thickness as f32 / geometry.scale,
+        vertical: geometry.edge.vertical(),
     }
 }
 
-/// Finds the primary taskbar and where the strip belongs on it.
+/// A child window's extent along the taskbar, in taskbar client pixels.
+unsafe fn child_span(taskbar: HWND, child: HWND, vertical: bool) -> (i32, i32) {
+    let mut rect = unsafe { std::mem::zeroed::<RECT>() };
+    unsafe { GetWindowRect(child, &mut rect) };
+    let mut points = [
+        POINT {
+            x: rect.left,
+            y: rect.top,
+        },
+        POINT {
+            x: rect.right,
+            y: rect.bottom,
+        },
+    ];
+    unsafe { MapWindowPoints(null_mut(), taskbar, points.as_mut_ptr(), 2) };
+    if vertical {
+        (points[0].y, points[1].y)
+    } else {
+        (points[0].x, points[1].x)
+    }
+}
+
+/// Finds the primary taskbar, the edge it is docked to and where the strip
+/// belongs on it.
 fn locate(alignment: TaskbarAlignment) -> Option<Geometry> {
+    use windows_sys::Win32::UI::WindowsAndMessaging::IsWindowVisible;
     unsafe {
         let taskbar = FindWindowW(wide("Shell_TrayWnd").as_ptr(), null_mut());
         if taskbar.is_null() {
@@ -1511,10 +1728,31 @@ fn locate(alignment: TaskbarAlignment) -> Option<Geometry> {
         let mut client = std::mem::zeroed::<RECT>();
         GetClientRect(taskbar, &mut client);
         let (width, height) = (client.right - client.left, client.bottom - client.top);
-        // Windows 11 has no vertical taskbar; an older shell may.
-        if width <= 0 || height <= 0 || width < height {
+        if width <= 0 || height <= 0 {
             return None;
         }
+        // Windows 11 docks only to the bottom; older shells and shell
+        // replacements also use the other edges.
+        let vertical = height > width;
+        let mut frame = std::mem::zeroed::<RECT>();
+        GetWindowRect(taskbar, &mut frame);
+        let monitor = monitor_bounds(taskbar);
+        let edge = if vertical {
+            if frame.left + frame.right < monitor.left + monitor.right {
+                Edge::Left
+            } else {
+                Edge::Right
+            }
+        } else if frame.top + frame.bottom < monitor.top + monitor.bottom {
+            Edge::Top
+        } else {
+            Edge::Bottom
+        };
+        let (thickness, long) = if vertical {
+            (width, height)
+        } else {
+            (height, width)
+        };
         let dpi = GetDpiForWindow(taskbar);
         let scale = if dpi == 0 { 1.0 } else { dpi as f32 / 96.0 };
         let anchor = match alignment {
@@ -1526,35 +1764,29 @@ fn locate(alignment: TaskbarAlignment) -> Option<Geometry> {
                     null_mut(),
                 );
                 if tray.is_null() {
-                    client.right - (200.0 * scale) as i32
+                    long - (200.0 * scale) as i32
                 } else {
-                    let mut rect = std::mem::zeroed::<RECT>();
-                    GetWindowRect(tray, &mut rect);
-                    let mut points = [
-                        POINT {
-                            x: rect.left,
-                            y: rect.top,
-                        },
-                        POINT {
-                            x: rect.right,
-                            y: rect.bottom,
-                        },
-                    ];
-                    MapWindowPoints(null_mut(), taskbar, points.as_mut_ptr(), 2);
-                    points[0].x
+                    child_span(taskbar, tray, vertical).0
                 }
             }
             TaskbarAlignment::Start => 0,
         };
+        let start = FindWindowExW(taskbar, null_mut(), wide("Start").as_ptr(), null_mut());
+        let start_button = (!start.is_null() && IsWindowVisible(start) != 0)
+            .then(|| child_span(taskbar, start, vertical))
+            .filter(|(from, to)| to > from)
+            .map(|(_, to)| to);
         let mut origin = POINT { x: 0, y: 0 };
         MapWindowPoints(taskbar, null_mut(), &mut origin, 1);
         Some(Geometry {
             taskbar,
             scale,
-            height,
+            edge,
+            thickness,
             anchor,
+            start_button,
             alignment,
-            origin: origin.x,
+            origin: (origin.x, origin.y),
         })
     }
 }

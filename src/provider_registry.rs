@@ -29,6 +29,16 @@ impl MetricDescriptor {
     pub fn localized_label(&self) -> &'static str {
         crate::i18n::tr(self.label_key)
     }
+
+    /// A few characters for tight spaces: `5h` and `7d` for the standard
+    /// session and weekly windows, the full label otherwise.
+    pub fn localized_short_label(&self) -> &'static str {
+        match self.label_key {
+            "msg-5h-session" => crate::i18n::tr("short-5h"),
+            "weekly" => crate::i18n::tr("short-7d"),
+            _ => self.localized_label(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

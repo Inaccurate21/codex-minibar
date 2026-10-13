@@ -17,7 +17,7 @@ pub(crate) mod render;
 
 use std::sync::{
     Mutex,
-    atomic::{AtomicU32, Ordering},
+    atomic::{AtomicBool, AtomicU32, Ordering},
 };
 
 use crate::{
@@ -46,20 +46,38 @@ impl Config {
 }
 
 /// Something the user asked for from a widget; performed by the bridge.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Action {
     /// Toggle the popup, opened on the widget's provider.
     Open {
         provider: Option<ProviderId>,
         anchor: (i32, i32),
+        page: crate::settings::TaskbarClick,
     },
+    /// Open Settings on the editor of this widget.
+    Edit(String),
     /// Open Settings on the Taskbar page.
     Settings,
     /// Turn the widgets off.
     Hide,
+    /// The tray menu's own commands.
+    AppSettings,
+    Update,
+    Exit,
 }
 
 static ACTIONS: Mutex<Vec<Action>> = Mutex::new(Vec::new());
+static UPDATE_AVAILABLE: AtomicBool = AtomicBool::new(false);
+
+/// Mirrors the tray menu's update item into the widgets' menu.
+pub fn set_update_available(available: bool) {
+    UPDATE_AVAILABLE.store(available, Ordering::SeqCst);
+}
+
+#[cfg(windows)]
+fn update_available() -> bool {
+    UPDATE_AVAILABLE.load(Ordering::SeqCst)
+}
 static BRIDGE_THREAD: AtomicU32 = AtomicU32::new(0);
 
 /// Remembers the thread that drains [`take_actions`] so a click can wake it.
@@ -170,7 +188,8 @@ pub(crate) fn preview(
     }
     let metrics = render::Metrics {
         scale: scale.max(0.5),
-        height,
+        thickness: height,
+        vertical: false,
     };
     let snapshot = RENDERER.with(|slot| {
         let mut slot = slot.borrow_mut();
@@ -244,6 +263,42 @@ mod tests {
             })
             .collect();
         (widgets, limits)
+    }
+
+    #[test]
+    fn every_style_lays_out_on_a_vertical_taskbar() {
+        let (widgets, limits) = sample();
+        let appearance = model::Appearance {
+            light: false,
+            colored_icons: true,
+            accent: [0, 120, 212],
+        };
+        let mut renderer = render::Renderer::new().expect("Direct2D is available");
+        let metrics = render::Metrics {
+            scale: 1.5,
+            thickness: 62.0,
+            vertical: true,
+        };
+        for widget in &widgets {
+            for show in [false, true] {
+                let widget = TaskbarWidget {
+                    show_icon: show,
+                    show_labels: show,
+                    show_values: show,
+                    show_pace: show,
+                    ..widget.clone()
+                };
+                let view = model::resolve(&widget, &limits, appearance);
+                let length = renderer
+                    .measure(&view, metrics)
+                    .expect("the widget lays out");
+                assert!(
+                    (20.0..200.0).contains(&length),
+                    "{:?} is {length} DIPs tall",
+                    widget.style
+                );
+            }
+        }
     }
 
     #[test]

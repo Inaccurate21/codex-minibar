@@ -29,7 +29,9 @@ fn main() {
             "glance" => Some(TaskbarWidgetStyle::Glance),
             "rings" => Some(TaskbarWidgetStyle::Rings),
             "bars" => Some(TaskbarWidgetStyle::Bars),
-            "compact" => Some(TaskbarWidgetStyle::Compact),
+            "nested" => Some(TaskbarWidgetStyle::Nested),
+            "dials" => Some(TaskbarWidgetStyle::Dials),
+            "meters" => Some(TaskbarWidgetStyle::Meters),
             _ => None,
         })
         .collect::<Vec<_>>();

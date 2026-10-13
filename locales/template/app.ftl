@@ -3904,9 +3904,6 @@ taskbar-show-provider-icon = { "" }
 # taskbar-style-glance = Glance
 taskbar-style-glance = { "" }
 
-# English source:
-# taskbar-style-compact = Compact
-taskbar-style-compact = { "" }
 
 # English source:
 # taskbar-style-glance-hint = The provider icon beside two lines of text, like the weather button.
@@ -3920,9 +3917,6 @@ taskbar-style-rings-hint = { "" }
 # taskbar-style-bars-hint = Thin progress bars stacked beside the provider icon.
 taskbar-style-bars-hint = { "" }
 
-# English source:
-# taskbar-style-compact-hint = Text only, laid out like the taskbar clock.
-taskbar-style-compact-hint = { "" }
 
 # English source:
 # taskbar-menu-open = Open Codex Minibar
@@ -3955,3 +3949,127 @@ taskbar-card-no-data = { "" }
 # English source:
 # taskbar-card-hint = Click to open · Right-click for options
 taskbar-card-hint = { "" }
+
+# English source:
+# short-5h = 5h
+short-5h = { "" }
+
+# English source:
+# short-7d = 7d
+short-7d = { "" }
+
+# English source:
+# taskbar-style-nested = Nested rings
+taskbar-style-nested = { "" }
+
+# English source:
+# taskbar-style-dials = Dials
+taskbar-style-dials = { "" }
+
+# English source:
+# taskbar-style-meters = Meters
+taskbar-style-meters = { "" }
+
+# English source:
+# taskbar-style-nested-hint = Concentric rings in the space of one, with values beside them if you like.
+taskbar-style-nested-hint = { "" }
+
+# English source:
+# taskbar-style-dials-hint = A small ring per quota with the number inside it.
+taskbar-style-dials-hint = { "" }
+
+# English source:
+# taskbar-style-meters-hint = Slim level columns, like a battery gauge.
+taskbar-style-meters-hint = { "" }
+
+# English source:
+# taskbar-show-provider-icon-description = The provider's mark at the start of the widget.
+taskbar-show-provider-icon-description = { "" }
+
+# English source:
+# taskbar-show-labels = Show labels
+taskbar-show-labels = { "" }
+
+# English source:
+# taskbar-show-labels-description = Short names like 5h and 7d next to the values.
+taskbar-show-labels-description = { "" }
+
+# English source:
+# taskbar-show-values = Show percentages
+taskbar-show-values = { "" }
+
+# English source:
+# taskbar-show-values-description = The quota percentages on the widget.
+taskbar-show-values-description = { "" }
+
+# English source:
+# taskbar-show-pace = Show pace
+taskbar-show-pace = { "" }
+
+# English source:
+# taskbar-show-pace-description = A mark where usage would be right now at an even burn.
+taskbar-show-pace-description = { "" }
+
+# English source:
+# taskbar-menu-edit = Edit this widget
+taskbar-menu-edit = { "" }
+
+# English source:
+# taskbar-content = Content
+taskbar-content = { "" }
+
+# English source:
+# taskbar-content-hint = What the widget writes next to its graphic.
+taskbar-content-hint = { "" }
+
+# English source:
+# taskbar-reset-time = Reset time
+taskbar-reset-time = { "" }
+
+# English source:
+# taskbar-reset-time-description = When each quota resets.
+taskbar-reset-time-description = { "" }
+
+# English source:
+# taskbar-reset-off = Off
+taskbar-reset-off = { "" }
+
+# English source:
+# taskbar-reset-countdown = Time left
+taskbar-reset-countdown = { "" }
+
+# English source:
+# taskbar-reset-clock = Clock time
+taskbar-reset-clock = { "" }
+
+# English source:
+# taskbar-cycle = Cycle widgets with the scroll wheel
+taskbar-cycle = { "" }
+
+# English source:
+# taskbar-cycle-description = Shows one widget at a time; scroll over it to switch to the next.
+taskbar-cycle-description = { "" }
+
+# English source:
+# taskbar-card-tokens = { $count } tokens
+taskbar-card-tokens = { "" }
+
+# English source:
+# taskbar-click = Click opens
+taskbar-click = { "" }
+
+# English source:
+# taskbar-click-description = The popup page a click on a widget opens.
+taskbar-click-description = { "" }
+
+# English source:
+# taskbar-click-nearest = Home, or the tab if not on Home
+taskbar-click-nearest = { "" }
+
+# English source:
+# taskbar-click-tab = Provider tab
+taskbar-click-tab = { "" }
+
+# English source:
+# taskbar-click-home = Home
+taskbar-click-home = { "" }

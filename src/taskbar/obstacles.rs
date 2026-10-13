@@ -24,13 +24,23 @@ use windows::Win32::{
     },
 };
 
+/// Screen rectangle: left, top, right, bottom.
+pub(super) type Bounds = (i32, i32, i32, i32);
+
 /// Explorer's buttons, in screen pixels.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) struct Obstacles {
-    /// Horizontal extent of Start, Search, Task View and the app buttons.
-    pub(super) cluster: Option<(i32, i32)>,
-    /// Right edge of the Windows widgets button at the leading edge.
-    pub(super) widgets_right: Option<i32>,
+    /// Bounds of Start, Search, Task View and the app buttons together.
+    pub(super) cluster: Option<Bounds>,
+    /// The Windows widgets button at the leading edge.
+    pub(super) widgets: Option<Bounds>,
+}
+
+fn union(a: Option<Bounds>, b: Bounds) -> Bounds {
+    match a {
+        Some(a) => (a.0.min(b.0), a.1.min(b.1), a.2.max(b.2), a.3.max(b.3)),
+        None => b,
+    }
 }
 
 const INTERVAL: Duration = Duration::from_secs(2);
@@ -118,20 +128,10 @@ fn measure(automation: &IUIAutomation) -> Option<Obstacles> {
             if rect.right <= rect.left || rect.bottom <= rect.top {
                 continue;
             }
+            let bounds = (rect.left, rect.top, rect.right, rect.bottom);
             match classify(&class, &id) {
-                Some(Kind::Widgets) => {
-                    obstacles.widgets_right = Some(
-                        obstacles
-                            .widgets_right
-                            .map_or(rect.right, |right| right.max(rect.right)),
-                    );
-                }
-                Some(Kind::Cluster) => {
-                    obstacles.cluster = Some(match obstacles.cluster {
-                        Some((left, right)) => (left.min(rect.left), right.max(rect.right)),
-                        None => (rect.left, rect.right),
-                    });
-                }
+                Some(Kind::Widgets) => obstacles.widgets = Some(union(obstacles.widgets, bounds)),
+                Some(Kind::Cluster) => obstacles.cluster = Some(union(obstacles.cluster, bounds)),
                 None => {}
             }
         }

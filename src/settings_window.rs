@@ -91,8 +91,8 @@ pub(crate) enum Command {
     OpenRouter(OpenRouterSettingsSnapshot),
     /// The popup shortcut's registration status changed.
     HotkeyStatus,
-    /// Open Settings on the Taskbar page.
-    OpenTaskbar,
+    /// Open Settings on the Taskbar page, with one widget's editor open.
+    OpenTaskbar(Option<String>),
 }
 
 fn post(command: Command) {
@@ -106,7 +106,12 @@ pub fn open() {
 
 /// Open (or focus) Settings on the Taskbar page.
 pub fn open_taskbar() {
-    post(Command::OpenTaskbar);
+    post(Command::OpenTaskbar(None));
+}
+
+/// Open Settings on the editor of the taskbar widget `id`.
+pub fn open_taskbar_widget(id: String) {
+    post(Command::OpenTaskbar(Some(id)));
 }
 
 /// Optimistic local edits own the displayed settings while the serial writer
@@ -261,14 +266,19 @@ pub(crate) fn handle(command: Command, state: &Arc<AppState>, cx: &mut AsyncApp)
             cx.notify();
         }),
         Command::HotkeyStatus => with_settings_window(cx, |_, cx| cx.notify()),
-        Command::OpenTaskbar => {
+        Command::OpenTaskbar(widget) => {
             if focus_existing(&ONBOARDING_WINDOW, cx) {
                 return;
             }
             if !focus_existing(&SETTINGS_WINDOW, cx) {
                 open_settings_window(Arc::clone(state), cx);
             }
-            with_settings_window(cx, |root, cx| root.open_tab(nav::Tab::Taskbar, cx));
+            with_settings_window(cx, |root, cx| {
+                root.open_tab(nav::Tab::Taskbar, cx);
+                if let Some(widget) = widget {
+                    root.open_taskbar_dialog(widget, cx);
+                }
+            });
         }
     }
 }

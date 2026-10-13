@@ -1693,39 +1693,114 @@ impl TrayWidget {
 #[serde(rename_all = "snake_case")]
 pub enum TaskbarWidgetStyle {
     /// Provider mark beside two lines of text, like the Windows weather
-    /// button.
+    /// button. Also reads the retired text-only `compact` design, which is
+    /// a Glance without the mark.
     #[default]
+    #[serde(alias = "compact")]
     Glance,
     /// A progress ring per indicator with its value beside it.
     Rings,
     /// Thin progress bars stacked beside the provider mark.
     Bars,
-    /// Text only, laid out like the taskbar clock.
-    Compact,
+    /// Concentric rings, one per indicator, with optional values beside.
+    Nested,
+    /// A ring per indicator with its value inside.
+    Dials,
+    /// Vertical level columns, like a battery gauge.
+    Meters,
 }
 
 impl TaskbarWidgetStyle {
-    pub const ALL: [Self; 4] = [Self::Glance, Self::Rings, Self::Bars, Self::Compact];
+    /// Picker order: text designs first, then by graphic.
+    pub const ALL: [Self; 6] = [
+        Self::Glance,
+        Self::Rings,
+        Self::Nested,
+        Self::Dials,
+        Self::Bars,
+        Self::Meters,
+    ];
 
     /// How many indicators fit the taskbar height in this design.
     pub const fn max_indicators(self) -> usize {
         match self {
-            Self::Glance | Self::Compact => 2,
-            Self::Rings | Self::Bars => 3,
+            Self::Glance => 2,
+            Self::Rings | Self::Bars | Self::Nested | Self::Dials | Self::Meters => 3,
         }
     }
 
-    pub const fn index(self) -> usize {
-        match self {
-            Self::Glance => 0,
-            Self::Rings => 1,
-            Self::Bars => 2,
-            Self::Compact => 3,
-        }
+    pub fn index(self) -> usize {
+        Self::ALL
+            .iter()
+            .position(|style| *style == self)
+            .unwrap_or_default()
+    }
+
+    /// Draws progress graphics, which can carry a pace marker.
+    pub const fn has_graphic(self) -> bool {
+        !matches!(self, Self::Glance)
+    }
+
+    /// Writes indicator names next to values.
+    pub const fn has_labels(self) -> bool {
+        !matches!(self, Self::Dials)
+    }
+
+    /// Writes reset times; dials have no room for them.
+    pub const fn has_reset(self) -> bool {
+        self.has_labels()
     }
 
     pub fn from_index(index: usize) -> Self {
         Self::ALL.get(index).copied().unwrap_or_default()
+    }
+}
+
+/// How a taskbar widget tells when its quotas reset.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskbarResetDisplay {
+    /// Not shown on the widget; the hover card still has it.
+    Off,
+    /// Time left: `2h 13m`.
+    #[default]
+    Countdown,
+    /// Wall-clock time: `18:40`, with the weekday once it is not today.
+    Clock,
+}
+
+impl TaskbarResetDisplay {
+    pub const ALL: [Self; 3] = [Self::Off, Self::Countdown, Self::Clock];
+
+    pub fn index(self) -> usize {
+        Self::ALL
+            .iter()
+            .position(|display| *display == self)
+            .unwrap_or_default()
+    }
+}
+
+/// The popup page a taskbar widget click opens.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TaskbarClick {
+    /// Home when it shows the widget's instance, otherwise its tab.
+    #[default]
+    Nearest,
+    /// The instance's tab.
+    Tab,
+    /// Home.
+    Home,
+}
+
+impl TaskbarClick {
+    pub const ALL: [Self; 3] = [Self::Nearest, Self::Tab, Self::Home];
+
+    pub fn index(self) -> usize {
+        Self::ALL
+            .iter()
+            .position(|click| *click == self)
+            .unwrap_or_default()
     }
 }
 
@@ -1759,6 +1834,18 @@ pub struct TaskbarWidget {
     /// Draws the provider mark of the first indicator.
     #[serde(default = "default_true")]
     pub show_icon: bool,
+    /// Writes short indicator names (`5h`, `7d`) beside values.
+    #[serde(default = "default_true")]
+    pub show_labels: bool,
+    /// Writes the quota percentages.
+    #[serde(default = "default_true")]
+    pub show_values: bool,
+    /// Writes when each quota resets.
+    #[serde(default)]
+    pub reset: TaskbarResetDisplay,
+    /// Marks where an even burn would be on rings, bars and meters.
+    #[serde(default = "default_true")]
+    pub show_pace: bool,
 }
 
 impl TaskbarWidget {
@@ -1776,6 +1863,10 @@ impl TaskbarWidget {
                 .map(|metric| TrayIndicator::new(provider, *metric))
                 .collect(),
             show_icon: true,
+            show_labels: true,
+            show_values: true,
+            reset: TaskbarResetDisplay::Countdown,
+            show_pace: true,
         }
     }
 
@@ -1819,6 +1910,10 @@ impl TaskbarWidget {
 pub struct TaskbarSettings {
     pub enabled: bool,
     pub alignment: TaskbarAlignment,
+    /// Shows one widget at a time; the scroll wheel over it switches.
+    pub cycle: bool,
+    /// The popup page a click opens.
+    pub click: TaskbarClick,
     pub widgets: Vec<TaskbarWidget>,
 }
 

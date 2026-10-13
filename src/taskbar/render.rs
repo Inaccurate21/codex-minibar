@@ -3,8 +3,12 @@
 //! Draws into a 32-bit premultiplied DIB, which the host hands to
 //! `UpdateLayeredWindow`. Everything is laid out in DIPs; the render target's
 //! DPI maps them to device pixels. Geometry and colors follow the Windows 11
-//! taskbar: 4 DIP vertical inset, 4 DIP corners, a 6 % white hover fill with
-//! a lighter top edge, Segoe UI Variable text and WinUI progress styling.
+//! taskbar: 4 DIP inset, 4 DIP corners, a 6 % white hover fill with a lighter
+//! top edge, Segoe UI Variable text and WinUI progress styling.
+//!
+//! Widgets lie along the taskbar: side by side on a horizontal taskbar,
+//! stacked on a vertical one. Each widget lays out from its own origin; the
+//! main axis runs along the taskbar and the cross axis spans its thickness.
 
 #![cfg(windows)]
 
@@ -25,11 +29,11 @@ use windows::{
 };
 use windows_numerics::Vector2;
 
-use super::model::{Appearance, Icon, Rgb, WidgetView};
+use super::model::{Appearance, Icon, Rgb, Row, WidgetView};
 use crate::settings::TaskbarWidgetStyle;
 
-/// Vertical inset of the hover plate inside the taskbar.
-const INSET_Y: f32 = 4.0;
+/// Inset of the hover plate from the taskbar's long edges.
+const INSET: f32 = 4.0;
 const RADIUS: f32 = 4.0;
 const PAD_START: f32 = 8.0;
 const PAD_END: f32 = 10.0;
@@ -39,9 +43,19 @@ const LABEL_GAP: f32 = 4.0;
 const RING: f32 = 28.0;
 const RING_GAP: f32 = 6.0;
 const UNIT_GAP: f32 = 12.0;
+const NESTED: f32 = 34.0;
+const DIAL: f32 = 30.0;
+const DIAL_GAP: f32 = 4.0;
+const COLUMN: f32 = 6.0;
+const COLUMN_GAP: f32 = 4.0;
 const BAR_SINGLE: f32 = 72.0;
 const BAR_MULTI: f32 = 44.0;
 const BAR_THICKNESS: f32 = 3.0;
+const PACE_WIDTH: f32 = 1.5;
+/// How far the pace mark reaches past a bar or ring stroke.
+const PACE_OVERHANG: f32 = 2.5;
+/// Padding at both ends of a widget on a vertical taskbar.
+const PAD_VERTICAL: f32 = 6.0;
 const MAX_LABEL_CHARS: usize = 18;
 
 /// Device geometry of the strip.
@@ -49,19 +63,30 @@ const MAX_LABEL_CHARS: usize = 18;
 pub(crate) struct Metrics {
     /// Device pixels per DIP.
     pub(crate) scale: f32,
-    /// Taskbar height in DIPs.
-    pub(crate) height: f32,
+    /// Taskbar thickness in DIPs: its height, or its width when vertical.
+    pub(crate) thickness: f32,
+    /// Widgets stack top to bottom on a left or right taskbar.
+    pub(crate) vertical: bool,
 }
 
 impl Metrics {
     fn inner(self) -> f32 {
-        (self.height - INSET_Y * 2.0).max(16.0)
+        (self.thickness - INSET * 2.0).max(16.0)
     }
 
     /// Font size of the two-line layouts; 12 DIP like the clock, smaller on
     /// the compact taskbar.
     fn line_font(self) -> f32 {
         (self.inner() / 2.0 / 1.36).clamp(8.5, 12.0)
+    }
+
+    /// Font size when `rows` lines share the taskbar height.
+    fn rows_font(self, rows: usize) -> f32 {
+        if rows > 2 {
+            (self.inner() / rows as f32 / 1.3).clamp(8.0, 10.0)
+        } else {
+            (self.line_font() - 1.0).max(8.0)
+        }
     }
 
     fn snap(self, value: f32) -> f32 {
@@ -72,8 +97,10 @@ impl Metrics {
 /// One widget placed on the strip, with its animation state.
 pub(crate) struct Item<'a> {
     pub(crate) view: &'a WidgetView,
-    pub(crate) x: f32,
-    pub(crate) width: f32,
+    /// Start along the taskbar, in DIPs.
+    pub(crate) offset: f32,
+    /// Extent along the taskbar, in DIPs.
+    pub(crate) length: f32,
     pub(crate) hover: f32,
     pub(crate) press: f32,
     pub(crate) opacity: f32,
@@ -108,13 +135,16 @@ enum Prim {
         y: f32,
         size: f32,
     },
+    /// A horizontal WinUI progress bar centered on `y`.
     Bar {
         x: f32,
         y: f32,
         width: f32,
         row: usize,
         color: Rgb,
+        pace: Option<f32>,
     },
+    /// A progress ring filling clockwise from twelve o'clock.
     Ring {
         cx: f32,
         cy: f32,
@@ -122,13 +152,25 @@ enum Prim {
         stroke: f32,
         row: usize,
         color: Rgb,
+        pace: Option<f32>,
+    },
+    /// A level column filling from the bottom.
+    Column {
+        x: f32,
+        y: f32,
+        width: f32,
+        height: f32,
+        row: usize,
+        color: Rgb,
+        pace: Option<f32>,
     },
     /// A hairline divider.
     Rule { x: f32, y: f32, width: f32 },
 }
 
 struct Content {
-    width: f32,
+    /// Extent along the taskbar.
+    length: f32,
     prims: Vec<Prim>,
 }
 
@@ -136,6 +178,20 @@ struct Line {
     layout: IDWriteTextLayout,
     width: f32,
     height: f32,
+}
+
+type Runs = Vec<(Line, Tone)>;
+
+/// A bar row's label, value and reset time.
+type Cells = (Option<Line>, Option<Line>, Option<Line>);
+
+fn runs_width(runs: &Runs) -> f32 {
+    runs.iter().map(|(line, _)| line.width).sum::<f32>()
+        + LABEL_GAP * runs.len().saturating_sub(1) as f32
+}
+
+fn runs_height(runs: &Runs) -> f32 {
+    runs.iter().map(|(line, _)| line.height).fold(0.0, f32::max)
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -187,6 +243,15 @@ fn truncate(label: &str) -> String {
         .to_owned();
     short.push('\u{2026}');
     short
+}
+
+/// Point on a circle, `turn` of the way clockwise from twelve o'clock.
+fn on_circle(center: Vector2, radius: f32, turn: f32) -> Vector2 {
+    let angle = turn * std::f32::consts::TAU - std::f32::consts::FRAC_PI_2;
+    Vector2 {
+        x: center.x + radius * angle.cos(),
+        y: center.y + radius * angle.sin(),
+    }
 }
 
 impl Renderer {
@@ -362,33 +427,36 @@ impl Renderer {
         bitmap
     }
 
-    /// Width of a widget in DIPs.
+    /// Extent of a widget along the taskbar, in DIPs.
     pub(crate) fn measure(
         &mut self,
         view: &WidgetView,
         metrics: Metrics,
-        now: DateTime<Utc>,
     ) -> windows::core::Result<f32> {
         self.set_dpi(metrics.scale)?;
-        Ok(metrics.snap(self.content(view, metrics, now)?.width))
+        Ok(metrics.snap(self.content(view, metrics)?.length))
     }
 
-    fn content(
-        &mut self,
-        view: &WidgetView,
-        metrics: Metrics,
-        now: DateTime<Utc>,
-    ) -> windows::core::Result<Content> {
+    fn content(&mut self, view: &WidgetView, metrics: Metrics) -> windows::core::Result<Content> {
+        if metrics.vertical {
+            return self.column(view, metrics);
+        }
         match view.style {
-            TaskbarWidgetStyle::Glance => self.glance(view, metrics, now),
+            TaskbarWidgetStyle::Glance => self.glance(view, metrics),
             TaskbarWidgetStyle::Rings => self.rings(view, metrics),
             TaskbarWidgetStyle::Bars => self.bars(view, metrics),
-            TaskbarWidgetStyle::Compact => self.compact(view, metrics),
+            TaskbarWidgetStyle::Nested => self.nested(view, metrics),
+            TaskbarWidgetStyle::Dials => self.dials(view, metrics),
+            TaskbarWidgetStyle::Meters => self.meters(view, metrics),
         }
     }
 
     fn icon_size(metrics: Metrics) -> f32 {
         ICON.min(metrics.inner() - 12.0).max(12.0)
+    }
+
+    fn pace(view: &WidgetView, row: &Row) -> Option<f32> {
+        row.pace.filter(|_| view.show_pace)
     }
 
     /// Leading provider mark; returns the x where content continues.
@@ -400,7 +468,7 @@ impl Renderer {
         prims.push(Prim::Icon {
             icon,
             x: PAD_START,
-            y: (metrics.height - size) / 2.0,
+            y: (metrics.thickness - size) / 2.0,
             size,
         });
         PAD_START + size + ICON_GAP
@@ -409,45 +477,43 @@ impl Renderer {
     /// Stacks lines vertically centered in the taskbar, left-aligned at `x`
     /// (or right-aligned to `x + block` when `right` is set).
     fn stack(
-        lines: Vec<Vec<(Line, Tone)>>,
+        lines: Vec<Runs>,
         x: f32,
         metrics: Metrics,
         right: bool,
         prims: &mut Vec<Prim>,
     ) -> f32 {
-        let widths = lines
-            .iter()
-            .map(|runs| {
-                runs.iter().map(|(line, _)| line.width).sum::<f32>()
-                    + LABEL_GAP * runs.len().saturating_sub(1) as f32
-            })
-            .collect::<Vec<_>>();
+        let widths = lines.iter().map(runs_width).collect::<Vec<_>>();
         let block = widths.iter().copied().fold(0.0, f32::max);
-        let heights = lines
-            .iter()
-            .map(|runs| runs.iter().map(|(line, _)| line.height).fold(0.0, f32::max))
-            .collect::<Vec<_>>();
+        let heights = lines.iter().map(runs_height).collect::<Vec<_>>();
         let total = heights.iter().sum::<f32>();
-        let mut y = (metrics.height - total) / 2.0;
+        let mut y = (metrics.thickness - total) / 2.0;
         for ((runs, width), height) in lines.into_iter().zip(widths).zip(heights) {
-            let mut cursor = if right { x + block - width } else { x };
-            for (line, tone) in runs {
-                let advance = line.width + LABEL_GAP;
-                prims.push(Prim::Text {
-                    // Baselines of mixed sizes share the bottom edge.
-                    y: y + height - line.height,
-                    layout: line.layout,
-                    x: cursor,
-                    tone,
-                });
-                cursor += advance;
-            }
+            let cursor = if right { x + block - width } else { x };
+            Self::place_runs(runs, cursor, y, height, prims);
             y += height;
         }
         block
     }
 
-    fn value_tone(row: &super::model::Row) -> Tone {
+    /// Lays `runs` left to right from `x`, sharing the bottom edge of a
+    /// line `height` tall at `y`.
+    fn place_runs(runs: Runs, x: f32, y: f32, height: f32, prims: &mut Vec<Prim>) {
+        let mut cursor = x;
+        for (line, tone) in runs {
+            let advance = line.width + LABEL_GAP;
+            prims.push(Prim::Text {
+                // Baselines of mixed sizes share the bottom edge.
+                y: y + height - line.height,
+                layout: line.layout,
+                x: cursor,
+                tone,
+            });
+            cursor += advance;
+        }
+    }
+
+    fn value_tone(row: &Row) -> Tone {
         if row.progress.is_none() {
             Tone::Secondary
         } else if row.tinted {
@@ -457,82 +523,110 @@ impl Renderer {
         }
     }
 
-    fn glance(
+    /// A row's pieces in reading order, as far as the widget shows them:
+    /// `5h 45% 2h 13m`. Text-only designs fall back to the value rather than
+    /// say nothing.
+    fn row_runs(
         &mut self,
         view: &WidgetView,
+        row: &Row,
+        font: f32,
+        value_weight: Weight,
+    ) -> windows::core::Result<Runs> {
+        let mut runs = Vec::with_capacity(3);
+        if view.show_labels {
+            runs.push((
+                self.line(&truncate(&row.label), font, Weight::Regular)?,
+                Tone::Secondary,
+            ));
+        }
+        if view.show_values || (runs.is_empty() && row.reset.is_none() && !view.style.has_graphic())
+        {
+            runs.push((
+                self.line(&row.value, font, value_weight)?,
+                Self::value_tone(row),
+            ));
+        }
+        if let Some(reset) = &row.reset {
+            runs.push((self.line(reset, font, Weight::Regular)?, Tone::Secondary));
+        }
+        Ok(runs)
+    }
+
+    /// One row as a headline over a caption: the value over `label ·
+    /// reset`, or whichever of them the widget shows. Empty when it shows
+    /// none of them.
+    fn headline(
+        &mut self,
+        view: &WidgetView,
+        row: &Row,
+        font: f32,
+        weight: Weight,
+        caption_font: f32,
+    ) -> windows::core::Result<Vec<Runs>> {
+        let label = view.show_labels.then(|| truncate(&row.label));
+        let mut caption = Vec::new();
+        let headline = if view.show_values {
+            caption.extend(label);
+            caption.extend(row.reset.clone());
+            Some((self.line(&row.value, font, weight)?, Self::value_tone(row)))
+        } else if let Some(reset) = &row.reset {
+            caption.extend(label);
+            Some((self.line(reset, font, weight)?, Tone::Primary))
+        } else if let Some(label) = label {
+            Some((self.line(&label, font, weight)?, Tone::Primary))
+        } else if !view.style.has_graphic() {
+            Some((self.line(&row.value, font, weight)?, Self::value_tone(row)))
+        } else {
+            None
+        };
+        let mut lines = Vec::with_capacity(2);
+        lines.extend(headline.map(|run| vec![run]));
+        if !caption.is_empty() {
+            lines.push(vec![(
+                self.line(&caption.join(" \u{00b7} "), caption_font, Weight::Regular)?,
+                Tone::Secondary,
+            )]);
+        }
+        Ok(lines)
+    }
+
+    /// One line per row, stacked beside a graphic at `x`; returns the
+    /// width used, nothing when the widget writes nothing.
+    fn values_beside(
+        &mut self,
+        view: &WidgetView,
+        x: f32,
         metrics: Metrics,
-        now: DateTime<Utc>,
-    ) -> windows::core::Result<Content> {
+        prims: &mut Vec<Prim>,
+    ) -> windows::core::Result<f32> {
+        if !view.has_text() {
+            return Ok(0.0);
+        }
+        let font = metrics.rows_font(view.rows.len());
+        let mut lines = Vec::with_capacity(view.rows.len());
+        for row in &view.rows {
+            lines.push(self.row_runs(view, row, font, Weight::Semibold)?);
+        }
+        Ok(Self::stack(lines, x, metrics, false, prims))
+    }
+
+    fn glance(&mut self, view: &WidgetView, metrics: Metrics) -> windows::core::Result<Content> {
         let mut prims = Vec::new();
         let x = Self::leading_icon(view, metrics, &mut prims);
         let font = metrics.line_font();
         let lines = if let [row] = view.rows.as_slice() {
-            vec![
-                vec![(
-                    self.line(&row.value, font, Weight::Semibold)?,
-                    Self::value_tone(row),
-                )],
-                vec![(
-                    self.line(&truncate(&view.glance_caption(now)), font, Weight::Regular)?,
-                    Tone::Secondary,
-                )],
-            ]
+            self.headline(view, row, font, Weight::Semibold, font)?
         } else {
             let mut lines = Vec::new();
             for row in &view.rows {
-                lines.push(vec![
-                    (
-                        self.line(&truncate(&row.label), font, Weight::Regular)?,
-                        Tone::Secondary,
-                    ),
-                    (
-                        self.line(&row.value, font, Weight::Semibold)?,
-                        Self::value_tone(row),
-                    ),
-                ]);
+                lines.push(self.row_runs(view, row, font, Weight::Semibold)?);
             }
             lines
         };
         let block = Self::stack(lines, x, metrics, false, &mut prims);
         Ok(Content {
-            width: x + block + PAD_END,
-            prims,
-        })
-    }
-
-    fn compact(&mut self, view: &WidgetView, metrics: Metrics) -> windows::core::Result<Content> {
-        let mut prims = Vec::new();
-        let font = metrics.line_font();
-        let lines = if let [row] = view.rows.as_slice() {
-            vec![
-                vec![(
-                    self.line(&row.value, font, Weight::Regular)?,
-                    Self::value_tone(row),
-                )],
-                vec![(
-                    self.line(&truncate(&row.label), font, Weight::Regular)?,
-                    Tone::Secondary,
-                )],
-            ]
-        } else {
-            let mut lines = Vec::new();
-            for row in &view.rows {
-                lines.push(vec![
-                    (
-                        self.line(&truncate(&row.label), font, Weight::Regular)?,
-                        Tone::Secondary,
-                    ),
-                    (
-                        self.line(&row.value, font, Weight::Regular)?,
-                        Self::value_tone(row),
-                    ),
-                ]);
-            }
-            lines
-        };
-        let block = Self::stack(lines, PAD_START + 2.0, metrics, true, &mut prims);
-        Ok(Content {
-            width: PAD_START + 2.0 + block + PAD_START + 2.0,
+            length: x + block + PAD_END,
             prims,
         })
     }
@@ -540,86 +634,179 @@ impl Renderer {
     fn bars(&mut self, view: &WidgetView, metrics: Metrics) -> windows::core::Result<Content> {
         let mut prims = Vec::new();
         let x = Self::leading_icon(view, metrics, &mut prims);
-        if let [row] = view.rows.as_slice() {
-            let font = metrics.line_font();
-            let label = self.line(&truncate(&row.label), font - 1.0, Weight::Regular)?;
-            let value = self.line(&row.value, font, Weight::Semibold)?;
-            let width = BAR_SINGLE.max(label.width + value.width + 12.0);
-            let gap = 5.0;
-            let total = value.height + gap + BAR_THICKNESS;
-            let top = (metrics.height - total) / 2.0;
-            prims.push(Prim::Text {
-                x,
-                y: top + value.height - label.height,
-                layout: label.layout,
-                tone: Tone::Secondary,
-            });
-            prims.push(Prim::Text {
-                x: x + width - value.width,
-                y: top,
-                layout: value.layout,
-                tone: Self::value_tone(row),
-            });
-            prims.push(Prim::Bar {
-                x,
-                y: top + value.height + gap + BAR_THICKNESS / 2.0,
-                width,
-                row: 0,
-                color: row.color,
-            });
+        if !view.has_text() {
+            // The bars alone, evenly spaced around the middle.
+            let width = if view.rows.len() > 1 {
+                BAR_MULTI
+            } else {
+                BAR_SINGLE
+            };
+            let pitch = 8.0;
+            let top = (metrics.thickness - pitch * (view.rows.len() as f32 - 1.0)) / 2.0;
+            for (index, row) in view.rows.iter().enumerate() {
+                prims.push(Prim::Bar {
+                    x,
+                    y: top + pitch * index as f32,
+                    width,
+                    row: index,
+                    color: row.color,
+                    pace: Self::pace(view, row),
+                });
+            }
             return Ok(Content {
-                width: x + width + PAD_END,
+                length: x + width + PAD_END,
                 prims,
             });
         }
-        let count = view.rows.len().max(1) as f32;
-        let font = if view.rows.len() > 2 {
-            (metrics.inner() / count / 1.3).clamp(8.0, 10.0)
-        } else {
-            (metrics.line_font() - 1.0).max(8.0)
-        };
-        let mut labels = Vec::new();
-        let mut values = Vec::new();
-        for row in &view.rows {
-            labels.push(self.line(&truncate(&row.label), font, Weight::Regular)?);
-            values.push(self.line(&row.value, font, Weight::Semibold)?);
+        if let [row] = view.rows.as_slice() {
+            // `label · reset` over the bar's start, the value over its end.
+            let font = metrics.line_font();
+            let mut caption = Vec::new();
+            if view.show_labels {
+                caption.push(truncate(&row.label));
+            }
+            caption.extend(row.reset.clone());
+            let caption = if caption.is_empty() {
+                None
+            } else {
+                Some(self.line(&caption.join(" \u{00b7} "), font - 1.0, Weight::Regular)?)
+            };
+            let value = if view.show_values {
+                Some(self.line(&row.value, font, Weight::Semibold)?)
+            } else {
+                None
+            };
+            let caption_width = caption.as_ref().map_or(0.0, |line| line.width + 12.0);
+            let value_width = value.as_ref().map_or(0.0, |line| line.width);
+            let width = BAR_SINGLE.max(caption_width + value_width);
+            let text_height = caption
+                .iter()
+                .chain(&value)
+                .map(|line| line.height)
+                .fold(0.0, f32::max);
+            let gap = 5.0;
+            let top = (metrics.thickness - text_height - gap - BAR_THICKNESS) / 2.0;
+            if let Some(caption) = caption {
+                prims.push(Prim::Text {
+                    x,
+                    y: top + text_height - caption.height,
+                    layout: caption.layout,
+                    tone: Tone::Secondary,
+                });
+            }
+            if let Some(value) = value {
+                prims.push(Prim::Text {
+                    x: x + width - value.width,
+                    y: top + text_height - value.height,
+                    layout: value.layout,
+                    tone: Self::value_tone(row),
+                });
+            }
+            prims.push(Prim::Bar {
+                x,
+                y: top + text_height + gap + BAR_THICKNESS / 2.0,
+                width,
+                row: 0,
+                color: row.color,
+                pace: Self::pace(view, row),
+            });
+            return Ok(Content {
+                length: x + width + PAD_END,
+                prims,
+            });
         }
-        let label_width = labels.iter().map(|line| line.width).fold(0.0, f32::max);
-        let value_width = values.iter().map(|line| line.width).fold(0.0, f32::max);
-        let pitch = labels
+        // Columns: label | bar | value | reset.
+        let count = view.rows.len().max(1) as f32;
+        let font = metrics.rows_font(view.rows.len());
+        let mut cells = Vec::with_capacity(view.rows.len());
+        for row in &view.rows {
+            let label = if view.show_labels {
+                Some(self.line(&truncate(&row.label), font, Weight::Regular)?)
+            } else {
+                None
+            };
+            let value = if view.show_values {
+                Some(self.line(&row.value, font, Weight::Semibold)?)
+            } else {
+                None
+            };
+            let reset = match &row.reset {
+                Some(reset) => Some(self.line(reset, font, Weight::Regular)?),
+                None => None,
+            };
+            cells.push((label, value, reset));
+        }
+        let widest = |pick: fn(&Cells) -> Option<&Line>| {
+            cells
+                .iter()
+                .filter_map(pick)
+                .map(|line| line.width)
+                .fold(0.0, f32::max)
+        };
+        let label_width = widest(|cell| cell.0.as_ref());
+        let value_width = widest(|cell| cell.1.as_ref());
+        let reset_width = widest(|cell| cell.2.as_ref());
+        let pitch = cells
             .iter()
+            .flat_map(|(label, value, reset)| [label, value, reset])
+            .flatten()
             .map(|line| line.height)
             .fold(0.0, f32::max)
             .min((metrics.inner() - 2.0) / count);
-        let top = (metrics.height - pitch * count) / 2.0;
-        let bar_x = x + label_width + 6.0;
+        let top = (metrics.thickness - pitch * count) / 2.0;
+        let bar_x = if label_width > 0.0 {
+            x + label_width + 6.0
+        } else {
+            x
+        };
         let value_x = bar_x + BAR_MULTI + 6.0;
-        for (index, ((label, value), row)) in
-            labels.into_iter().zip(values).zip(&view.rows).enumerate()
-        {
+        let reset_x = if value_width > 0.0 {
+            value_x + value_width + LABEL_GAP + 2.0
+        } else {
+            value_x
+        };
+        let end = if value_width + reset_width > 0.0 {
+            reset_x + reset_width
+        } else {
+            bar_x + BAR_MULTI
+        };
+        for (index, ((label, value, reset), row)) in cells.into_iter().zip(&view.rows).enumerate() {
             let center = top + pitch * (index as f32 + 0.5);
-            prims.push(Prim::Text {
-                x,
-                y: center - label.height / 2.0,
-                layout: label.layout,
-                tone: Tone::Secondary,
-            });
+            if let Some(label) = label {
+                prims.push(Prim::Text {
+                    x,
+                    y: center - label.height / 2.0,
+                    layout: label.layout,
+                    tone: Tone::Secondary,
+                });
+            }
             prims.push(Prim::Bar {
                 x: bar_x,
                 y: center,
                 width: BAR_MULTI,
                 row: index,
                 color: row.color,
+                pace: Self::pace(view, row),
             });
-            prims.push(Prim::Text {
-                x: value_x + value_width - value.width,
-                y: center - value.height / 2.0,
-                layout: value.layout,
-                tone: Self::value_tone(row),
-            });
+            if let Some(value) = value {
+                prims.push(Prim::Text {
+                    x: value_x + value_width - value.width,
+                    y: center - value.height / 2.0,
+                    layout: value.layout,
+                    tone: Self::value_tone(row),
+                });
+            }
+            if let Some(reset) = reset {
+                prims.push(Prim::Text {
+                    x: reset_x,
+                    y: center - reset.height / 2.0,
+                    layout: reset.layout,
+                    tone: Tone::Secondary,
+                });
+            }
         }
         Ok(Content {
-            width: value_x + value_width + PAD_END,
+            length: end + PAD_END,
             prims,
         })
     }
@@ -632,10 +819,10 @@ impl Renderer {
         let mut x = PAD_START;
         for (index, row) in view.rows.iter().enumerate() {
             if index > 0 {
-                x += UNIT_GAP;
+                x += if view.has_text() { UNIT_GAP } else { RING_GAP };
             }
             let cx = x + diameter / 2.0;
-            let cy = metrics.height / 2.0;
+            let cy = metrics.thickness / 2.0;
             prims.push(Prim::Ring {
                 cx,
                 cy,
@@ -643,6 +830,7 @@ impl Renderer {
                 stroke,
                 row: index,
                 color: row.color,
+                pace: Self::pace(view, row),
             });
             if view.icon.is_some() {
                 let size = (diameter * 0.46).round();
@@ -653,23 +841,364 @@ impl Renderer {
                     size,
                 });
             }
-            x += diameter + RING_GAP;
-            let lines = vec![
-                vec![(
-                    self.line(&row.value, font, Weight::Semibold)?,
-                    Self::value_tone(row),
-                )],
-                vec![(
-                    self.line(&truncate(&row.label), font - 1.0, Weight::Regular)?,
-                    Tone::Secondary,
-                )],
-            ];
+            x += diameter;
+            let lines = self.headline(view, row, font, Weight::Semibold, font - 1.0)?;
+            if lines.is_empty() {
+                continue;
+            }
+            x += RING_GAP;
             x += Self::stack(lines, x, metrics, false, &mut prims);
         }
         Ok(Content {
-            width: x + PAD_END,
+            length: x + PAD_END,
             prims,
         })
+    }
+
+    /// Concentric rings centered at `center`, the first indicator outermost.
+    /// Returns the diameter of the free disc inside the innermost ring.
+    fn concentric(view: &WidgetView, center: Vector2, diameter: f32, prims: &mut Vec<Prim>) -> f32 {
+        let count = view.rows.len().max(1);
+        let stroke = if count > 2 { 2.5 } else { 3.0 };
+        let gap = 1.5;
+        let mut radius = (diameter - stroke) / 2.0;
+        for (index, row) in view.rows.iter().enumerate() {
+            if index > 0 {
+                radius -= stroke + gap;
+            }
+            prims.push(Prim::Ring {
+                cx: center.x,
+                cy: center.y,
+                radius,
+                stroke,
+                row: index,
+                color: row.color,
+                pace: Self::pace(view, row),
+            });
+        }
+        ((radius - stroke / 2.0) * 2.0 - 3.0).max(0.0)
+    }
+
+    fn nested(&mut self, view: &WidgetView, metrics: Metrics) -> windows::core::Result<Content> {
+        let mut prims = Vec::new();
+        let diameter = NESTED.min(metrics.inner() - 6.0).max(18.0);
+        // Two rings leave room for the mark inside; three push it out front.
+        let inside = view.rows.len() <= 2;
+        let mut x = if inside {
+            PAD_START
+        } else {
+            Self::leading_icon(view, metrics, &mut prims)
+        };
+        let center = Vector2 {
+            x: x + diameter / 2.0,
+            y: metrics.thickness / 2.0,
+        };
+        let hole = Self::concentric(view, center, diameter, &mut prims);
+        if inside && let Some(icon) = view.icon.clone() {
+            let size = hole.min(16.0).floor();
+            if size >= 8.0 {
+                prims.push(Prim::Icon {
+                    icon,
+                    x: center.x - size / 2.0,
+                    y: center.y - size / 2.0,
+                    size,
+                });
+            }
+        }
+        x += diameter;
+        if view.has_text() {
+            x += RING_GAP + 2.0;
+            x += self.values_beside(view, x, metrics, &mut prims)?;
+        }
+        Ok(Content {
+            length: x + PAD_END,
+            prims,
+        })
+    }
+
+    /// The value inside a dial: the number alone, `%` would not fit.
+    fn dial_text(&mut self, row: &Row, diameter: f32) -> windows::core::Result<Line> {
+        let number = row.value.trim_end_matches('%');
+        let size = if number.chars().count() > 2 {
+            diameter * 0.3
+        } else {
+            diameter * 0.37
+        };
+        self.line(number, size.clamp(8.0, 12.0), Weight::Semibold)
+    }
+
+    fn dial(
+        &mut self,
+        view: &WidgetView,
+        index: usize,
+        center: Vector2,
+        diameter: f32,
+        prims: &mut Vec<Prim>,
+    ) -> windows::core::Result<()> {
+        let row = &view.rows[index];
+        let stroke = 2.5;
+        prims.push(Prim::Ring {
+            cx: center.x,
+            cy: center.y,
+            radius: (diameter - stroke) / 2.0,
+            stroke,
+            row: index,
+            color: row.color,
+            pace: Self::pace(view, row),
+        });
+        if !view.show_values {
+            return Ok(());
+        }
+        let text = self.dial_text(row, diameter)?;
+        prims.push(Prim::Text {
+            x: center.x - text.width / 2.0,
+            y: center.y - text.height / 2.0,
+            layout: text.layout,
+            tone: Self::value_tone(row),
+        });
+        Ok(())
+    }
+
+    fn dials(&mut self, view: &WidgetView, metrics: Metrics) -> windows::core::Result<Content> {
+        let mut prims = Vec::new();
+        let diameter = DIAL.min(metrics.inner() - 6.0).max(18.0);
+        let mut x = Self::leading_icon(view, metrics, &mut prims);
+        if view.icon.is_some() {
+            x -= ICON_GAP - DIAL_GAP;
+        }
+        for index in 0..view.rows.len() {
+            if index > 0 {
+                x += DIAL_GAP;
+            }
+            let center = Vector2 {
+                x: x + diameter / 2.0,
+                y: metrics.thickness / 2.0,
+            };
+            self.dial(view, index, center, diameter, &mut prims)?;
+            x += diameter;
+        }
+        Ok(Content {
+            length: x + PAD_START,
+            prims,
+        })
+    }
+
+    /// Level columns side by side from `x`, vertically centered on `cy`.
+    fn columns(view: &WidgetView, x: f32, cy: f32, height: f32, prims: &mut Vec<Prim>) -> f32 {
+        let mut cursor = x;
+        for (index, row) in view.rows.iter().enumerate() {
+            if index > 0 {
+                cursor += COLUMN_GAP;
+            }
+            prims.push(Prim::Column {
+                x: cursor,
+                y: cy - height / 2.0,
+                width: COLUMN,
+                height,
+                row: index,
+                color: row.color,
+                pace: Self::pace(view, row),
+            });
+            cursor += COLUMN;
+        }
+        cursor - x
+    }
+
+    fn meters(&mut self, view: &WidgetView, metrics: Metrics) -> windows::core::Result<Content> {
+        let mut prims = Vec::new();
+        let mut x = Self::leading_icon(view, metrics, &mut prims);
+        let height = (metrics.inner() - 10.0).max(12.0);
+        x += Self::columns(view, x, metrics.thickness / 2.0, height, &mut prims);
+        if view.has_text() {
+            x += ICON_GAP;
+            x += self.values_beside(view, x, metrics, &mut prims)?;
+        }
+        Ok(Content {
+            length: x + PAD_END,
+            prims,
+        })
+    }
+
+    /// A widget on a vertical taskbar: the mark, the graphic and the values
+    /// stacked top to bottom, each centered across the taskbar.
+    fn column(&mut self, view: &WidgetView, metrics: Metrics) -> windows::core::Result<Content> {
+        let mut prims = Vec::new();
+        let cross = metrics.thickness;
+        let room = (cross - INSET * 2.0 - 8.0).max(16.0);
+        let middle = cross / 2.0;
+        let mut y = PAD_VERTICAL;
+        let style = view.style;
+        // Rings carry the mark inside each ring, two nested rings inside
+        // the innermost one.
+        let icon_inside = style == TaskbarWidgetStyle::Rings
+            || (style == TaskbarWidgetStyle::Nested && view.rows.len() <= 2);
+        let icon_first = !icon_inside;
+        if icon_first && let Some(icon) = view.icon.clone() {
+            let size = Self::icon_size(metrics).min(room);
+            prims.push(Prim::Icon {
+                icon,
+                x: middle - size / 2.0,
+                y,
+                size,
+            });
+            y += size + 6.0;
+        }
+        let font = if view.rows.len() > 2 { 11.0 } else { 12.0 };
+        // Value lines under the graphic; rings, dials and bars carry their
+        // values with each indicator instead.
+        let values = matches!(style, TaskbarWidgetStyle::Glance)
+            || (matches!(
+                style,
+                TaskbarWidgetStyle::Nested | TaskbarWidgetStyle::Meters
+            ) && view.show_values);
+        match style {
+            TaskbarWidgetStyle::Rings | TaskbarWidgetStyle::Dials => {
+                let diameter = if style == TaskbarWidgetStyle::Dials {
+                    DIAL
+                } else {
+                    RING
+                }
+                .min(room);
+                for (index, row) in view.rows.iter().enumerate() {
+                    let center = Vector2 {
+                        x: middle,
+                        y: y + diameter / 2.0,
+                    };
+                    if style == TaskbarWidgetStyle::Dials {
+                        self.dial(view, index, center, diameter, &mut prims)?;
+                        y += diameter + DIAL_GAP;
+                        continue;
+                    }
+                    let stroke = 3.0;
+                    prims.push(Prim::Ring {
+                        cx: center.x,
+                        cy: center.y,
+                        radius: (diameter - stroke) / 2.0,
+                        stroke,
+                        row: index,
+                        color: row.color,
+                        pace: Self::pace(view, row),
+                    });
+                    if view.icon.is_some() {
+                        let size = (diameter * 0.46).round();
+                        prims.push(Prim::Icon {
+                            icon: row.icon.clone(),
+                            x: center.x - size / 2.0,
+                            y: center.y - size / 2.0,
+                            size,
+                        });
+                    }
+                    y += diameter + 3.0;
+                    if view.show_values {
+                        y += self.centered(view, row, font, middle, room, y, &mut prims)? + 3.0;
+                    }
+                    y += 3.0;
+                }
+                if style == TaskbarWidgetStyle::Dials {
+                    y += 6.0 - DIAL_GAP;
+                }
+            }
+            TaskbarWidgetStyle::Nested => {
+                let diameter = NESTED.min(room);
+                let center = Vector2 {
+                    x: middle,
+                    y: y + diameter / 2.0,
+                };
+                let hole = Self::concentric(view, center, diameter, &mut prims);
+                if !icon_first && let Some(icon) = view.icon.clone() {
+                    let size = hole.min(16.0).floor();
+                    if size >= 8.0 {
+                        prims.push(Prim::Icon {
+                            icon,
+                            x: center.x - size / 2.0,
+                            y: center.y - size / 2.0,
+                            size,
+                        });
+                    }
+                }
+                y += diameter + 6.0;
+            }
+            TaskbarWidgetStyle::Meters => {
+                let count = view.rows.len().max(1) as f32;
+                let width = count * COLUMN + (count - 1.0) * COLUMN_GAP;
+                let height = 28.0;
+                Self::columns(
+                    view,
+                    middle - width / 2.0,
+                    y + height / 2.0,
+                    height,
+                    &mut prims,
+                );
+                y += height + 6.0;
+            }
+            TaskbarWidgetStyle::Bars => {
+                let width = room;
+                for (index, row) in view.rows.iter().enumerate() {
+                    if view.show_values {
+                        y += self.centered(view, row, font, middle, room, y, &mut prims)? + 3.0;
+                    }
+                    prims.push(Prim::Bar {
+                        x: middle - width / 2.0,
+                        y: y + BAR_THICKNESS / 2.0,
+                        width,
+                        row: index,
+                        color: row.color,
+                        pace: Self::pace(view, row),
+                    });
+                    y += BAR_THICKNESS + 6.0;
+                }
+            }
+            TaskbarWidgetStyle::Glance => {}
+        }
+        if values {
+            for row in &view.rows {
+                y += self.centered(view, row, font, middle, room, y, &mut prims)?;
+            }
+            y += PAD_VERTICAL;
+        }
+        Ok(Content { length: y, prims })
+    }
+
+    /// One row's `label value` centered on `middle`, dropping the label when
+    /// it does not fit `room`. Returns the line height.
+    #[allow(clippy::too_many_arguments)]
+    fn centered(
+        &mut self,
+        view: &WidgetView,
+        row: &Row,
+        font: f32,
+        middle: f32,
+        room: f32,
+        y: f32,
+        prims: &mut Vec<Prim>,
+    ) -> windows::core::Result<f32> {
+        self.centered_with(view, row, font, Weight::Semibold, middle, room, y, prims)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn centered_with(
+        &mut self,
+        view: &WidgetView,
+        row: &Row,
+        font: f32,
+        weight: Weight,
+        middle: f32,
+        room: f32,
+        y: f32,
+        prims: &mut Vec<Prim>,
+    ) -> windows::core::Result<f32> {
+        let mut runs = self.row_runs(view, row, font, weight)?;
+        // Too wide for the taskbar: drop the label, then the reset time.
+        if runs.len() > 1 && view.show_labels && runs_width(&runs) > room {
+            runs.remove(0);
+        }
+        if runs.len() > 1 && row.reset.is_some() && runs_width(&runs) > room {
+            runs.pop();
+        }
+        let width = runs_width(&runs);
+        let height = runs_height(&runs);
+        Self::place_runs(runs, middle - width / 2.0, y, height, prims);
+        Ok(height)
     }
 
     /// Paints the strip into a DIB selected into `hdc`.
@@ -680,15 +1209,14 @@ impl Renderer {
         metrics: Metrics,
         appearance: Appearance,
         items: &[Item<'_>],
-        now: DateTime<Utc>,
     ) -> windows::core::Result<()> {
         self.set_dpi(metrics.scale)?;
-        let result = self.paint_once(hdc, size, metrics, appearance, items, now);
+        let result = self.paint_once(hdc, size, metrics, appearance, items);
         if let Err(error) = &result
             && error.code() == windows::Win32::Foundation::D2DERR_RECREATE_TARGET
         {
             self.recreate()?;
-            return self.paint_once(hdc, size, metrics, appearance, items, now);
+            return self.paint_once(hdc, size, metrics, appearance, items);
         }
         result
     }
@@ -700,7 +1228,6 @@ impl Renderer {
         metrics: Metrics,
         appearance: Appearance,
         items: &[Item<'_>],
-        now: DateTime<Utc>,
     ) -> windows::core::Result<()> {
         let bounds = RECT {
             left: 0,
@@ -711,7 +1238,7 @@ impl Renderer {
         // Build every text layout before drawing begins.
         let mut contents = Vec::with_capacity(items.len());
         for item in items {
-            contents.push(self.content(item.view, metrics, now)?);
+            contents.push(self.content(item.view, metrics)?);
         }
         unsafe {
             self.target.BindDC(HDC(hdc), &bounds).ok()?;
@@ -738,9 +1265,30 @@ impl Renderer {
         metrics: Metrics,
         appearance: Appearance,
     ) {
-        let x = metrics.snap(item.x);
+        let offset = metrics.snap(item.offset);
+        let (plate, translate) = if metrics.vertical {
+            (
+                rect(
+                    INSET,
+                    offset,
+                    metrics.thickness - INSET,
+                    offset + item.length,
+                ),
+                windows_numerics::Matrix3x2::translation(0.0, offset),
+            )
+        } else {
+            (
+                rect(
+                    offset,
+                    INSET,
+                    offset + item.length,
+                    metrics.thickness - INSET,
+                ),
+                windows_numerics::Matrix3x2::translation(offset, 0.0),
+            )
+        };
         let plate = D2D1_ROUNDED_RECT {
-            rect: rect(x, INSET_Y, x + item.width, metrics.height - INSET_Y),
+            rect: plate,
             radiusX: RADIUS,
             radiusY: RADIUS,
         };
@@ -751,10 +1299,7 @@ impl Renderer {
         self.paint_plate(&plate, item.hover, item.press, opacity, appearance);
         // Pressed content dims like a taskbar button.
         let content_opacity = opacity * (1.0 - 0.2 * item.press);
-        unsafe {
-            let translate = windows_numerics::Matrix3x2::translation(x, 0.0);
-            self.target.SetTransform(&translate);
-        }
+        unsafe { self.target.SetTransform(&translate) };
         for prim in content.prims {
             self.paint_prim(prim, item.progress, metrics, appearance, content_opacity);
         }
@@ -858,6 +1403,15 @@ impl Renderer {
         if appearance.light { 0.446 } else { 0.545 }
     }
 
+    /// The pace mark: white on a dark taskbar, near-black on a light one,
+    /// where white would vanish.
+    fn set_pace_color(&self, appearance: Appearance, opacity: f32) {
+        unsafe {
+            self.brush
+                .SetColor(&color(appearance.text(), appearance.text_alpha() * opacity));
+        }
+    }
+
     fn paint_prim(
         &mut self,
         prim: Prim,
@@ -866,6 +1420,7 @@ impl Renderer {
         appearance: Appearance,
         opacity: f32,
     ) {
+        let fill_of = |row: usize| progress.get(row).copied().flatten();
         match prim {
             Prim::Text { layout, x, y, tone } => {
                 let (rgb, alpha) = Self::tone_color(tone, appearance);
@@ -913,6 +1468,7 @@ impl Renderer {
                 width,
                 row,
                 color: rgb,
+                pace,
             } => unsafe {
                 let one = 1.0 / metrics.scale;
                 let y = metrics.snap(y);
@@ -924,7 +1480,7 @@ impl Renderer {
                     &rect(x, y - one / 2.0, x + width, y + one / 2.0),
                     &self.brush,
                 );
-                if let Some(fill) = progress.get(row).copied().flatten()
+                if let Some(fill) = fill_of(row)
                     && fill > 0.004
                 {
                     let half = BAR_THICKNESS / 2.0;
@@ -939,7 +1495,60 @@ impl Renderer {
                         opacity,
                     );
                 }
+                if let Some(pace) = pace {
+                    let at = metrics.snap(x + width * pace.clamp(0.0, 1.0));
+                    let reach = BAR_THICKNESS / 2.0 + PACE_OVERHANG;
+                    self.set_pace_color(appearance, opacity);
+                    self.fill_pace(rect(
+                        at - PACE_WIDTH / 2.0,
+                        y - reach,
+                        at + PACE_WIDTH / 2.0,
+                        y + reach,
+                    ));
+                }
             },
+            Prim::Column {
+                x,
+                y,
+                width,
+                height,
+                row,
+                color: rgb,
+                pace,
+            } => {
+                let half = width / 2.0;
+                let track = D2D1_ROUNDED_RECT {
+                    rect: rect(x, y, x + width, y + height),
+                    radiusX: half,
+                    radiusY: half,
+                };
+                let track_alpha = if appearance.light { 0.1 } else { 0.14 };
+                self.fill(&track, appearance.text(), track_alpha * opacity);
+                if let Some(fill) = fill_of(row)
+                    && fill > 0.004
+                {
+                    let level = (height * fill.clamp(0.0, 1.0)).max(width);
+                    self.fill(
+                        &D2D1_ROUNDED_RECT {
+                            rect: rect(x, y + height - level, x + width, y + height),
+                            radiusX: half,
+                            radiusY: half,
+                        },
+                        rgb,
+                        opacity,
+                    );
+                }
+                if let Some(pace) = pace {
+                    let at = metrics.snap(y + height * (1.0 - pace.clamp(0.0, 1.0)));
+                    self.set_pace_color(appearance, opacity);
+                    self.fill_pace(rect(
+                        x - PACE_OVERHANG + 1.0,
+                        at - PACE_WIDTH / 2.0,
+                        x + width + PACE_OVERHANG - 1.0,
+                        at + PACE_WIDTH / 2.0,
+                    ));
+                }
+            }
             Prim::Ring {
                 cx,
                 cy,
@@ -947,67 +1556,70 @@ impl Renderer {
                 stroke,
                 row,
                 color: rgb,
+                pace,
             } => unsafe {
                 let one = 1.0 / metrics.scale;
                 let center = Vector2 { x: cx, y: cy };
+                let circle = D2D1_ELLIPSE {
+                    point: center,
+                    radiusX: radius,
+                    radiusY: radius,
+                };
                 self.brush.SetColor(&color(
                     appearance.text(),
                     Self::track_alpha(appearance) * opacity,
                 ));
-                self.target.DrawEllipse(
-                    &D2D1_ELLIPSE {
-                        point: center,
-                        radiusX: radius,
-                        radiusY: radius,
-                    },
-                    &self.brush,
-                    one,
-                    None,
-                );
-                let Some(fill) = progress.get(row).copied().flatten() else {
-                    return;
-                };
-                let fill = fill.clamp(0.0, 1.0);
-                if fill <= 0.004 {
-                    return;
+                self.target.DrawEllipse(&circle, &self.brush, one, None);
+                if let Some(fill) = fill_of(row).map(|fill| fill.clamp(0.0, 1.0))
+                    && fill > 0.004
+                {
+                    self.brush.SetColor(&color(rgb, opacity));
+                    if fill >= 0.999 {
+                        self.target
+                            .DrawEllipse(&circle, &self.brush, stroke, &self.round);
+                    } else if let Some(arc) = self.arc(center, radius, fill) {
+                        self.target
+                            .DrawGeometry(&arc, &self.brush, stroke, &self.round);
+                    }
                 }
-                self.brush.SetColor(&color(rgb, opacity));
-                if fill >= 0.999 {
-                    self.target.DrawEllipse(
-                        &D2D1_ELLIPSE {
-                            point: center,
-                            radiusX: radius,
-                            radiusY: radius,
-                        },
+                if let Some(pace) = pace {
+                    let reach = stroke / 2.0 + PACE_OVERHANG - 1.0;
+                    let turn = pace.clamp(0.0, 1.0);
+                    self.set_pace_color(appearance, opacity);
+                    self.target.DrawLine(
+                        on_circle(center, (radius - reach).max(0.0), turn),
+                        on_circle(center, radius + reach, turn),
                         &self.brush,
-                        stroke,
+                        PACE_WIDTH,
                         &self.round,
                     );
-                    return;
-                }
-                if let Some(arc) = self.arc(center, radius, fill) {
-                    self.target
-                        .DrawGeometry(&arc, &self.brush, stroke, &self.round);
                 }
             },
         }
     }
 
+    fn fill_pace(&self, mark: D2D_RECT_F) {
+        let radius = PACE_WIDTH / 2.0;
+        unsafe {
+            self.target.FillRoundedRectangle(
+                &D2D1_ROUNDED_RECT {
+                    rect: mark,
+                    radiusX: radius,
+                    radiusY: radius,
+                },
+                &self.brush,
+            );
+        }
+    }
+
     /// Clockwise arc from twelve o'clock covering `fill` of the circle.
     fn arc(&self, center: Vector2, radius: f32, fill: f32) -> Option<ID2D1PathGeometry> {
-        let point = |turn: f32| {
-            let angle = turn * std::f32::consts::TAU - std::f32::consts::FRAC_PI_2;
-            Vector2 {
-                x: center.x + radius * angle.cos(),
-                y: center.y + radius * angle.sin(),
-            }
-        };
         unsafe {
             let path = self.factory.CreatePathGeometry().ok()?;
             let sink = path.Open().ok()?;
-            sink.BeginFigure(point(0.0), D2D1_FIGURE_BEGIN_HOLLOW);
+            sink.BeginFigure(on_circle(center, radius, 0.0), D2D1_FIGURE_BEGIN_HOLLOW);
             sink.AddArc(&D2D1_ARC_SEGMENT {
-                point: point(fill),
+                point: on_circle(center, radius, fill),
                 size: D2D_SIZE_F {
                     width: radius,
                     height: radius,
@@ -1034,7 +1646,9 @@ const CARD_PAD: f32 = 14.0;
 const CARD_RADIUS: f32 = 8.0;
 
 impl Renderer {
-    /// Hover card content, laid out from the card's top-left corner.
+    /// Hover card content, laid out from the card's top-left corner: one
+    /// section per provider with every quota and today's usage. Bars index
+    /// [`card_progress`] order.
     fn card_content(
         &mut self,
         view: &WidgetView,
@@ -1043,90 +1657,123 @@ impl Renderer {
         let mut prims = Vec::new();
         let inner = CARD_WIDTH - CARD_PAD * 2.0;
         let mut y = CARD_PAD;
-        let header_provider = view.provider;
-        if let Some(provider) = header_provider {
-            let name = self.line(&provider.qualified_name(), 14.0, Weight::Semibold)?;
-            let icon = view.rows.first().map(|row| row.icon.clone());
-            let mut x = CARD_PAD;
-            if let Some(icon) = icon {
-                prims.push(Prim::Icon {
-                    icon,
-                    x,
-                    y: y + (name.height - 16.0) / 2.0,
-                    size: 16.0,
-                });
-                x += 16.0 + 8.0;
-            }
-            let height = name.height;
-            prims.push(Prim::Text {
-                layout: name.layout,
-                x,
-                y,
-                tone: Tone::Primary,
-            });
-            y += height + 10.0;
-        }
-        for (index, row) in view.rows.iter().enumerate() {
+        let mut bar = 0;
+        for (index, section) in view.card.iter().enumerate() {
             if index > 0 {
                 y += 12.0;
+                prims.push(Prim::Rule {
+                    x: CARD_PAD,
+                    y,
+                    width: inner,
+                });
+                y += 12.0;
             }
-            let label = if Some(row.provider) == header_provider {
-                row.label.clone()
-            } else {
-                format!("{} \u{00b7} {}", row.provider.qualified_name(), row.label)
-            };
-            let label = self.line(&label, 12.0, Weight::Regular)?;
-            let value_text = if row.progress.is_some() {
-                let key = match row.limit_value {
-                    crate::settings::LimitValue::Remaining => "taskbar-card-left",
-                    crate::settings::LimitValue::Used => "taskbar-card-used",
-                };
-                crate::i18n::format(key, &[("value", row.value.clone())])
-            } else {
-                row.value.clone()
-            };
-            let value = self.line(&value_text, 12.0, Weight::Semibold)?;
-            let line_height = label.height.max(value.height);
-            prims.push(Prim::Text {
-                layout: label.layout,
+            // Mark, name and plan.
+            let name = self.line(&section.provider.qualified_name(), 14.0, Weight::Semibold)?;
+            prims.push(Prim::Icon {
+                icon: section.icon.clone(),
                 x: CARD_PAD,
+                y: y + (name.height - 16.0) / 2.0,
+                size: 16.0,
+            });
+            let name_x = CARD_PAD + 16.0 + 8.0;
+            let (name_width, name_height) = (name.width, name.height);
+            prims.push(Prim::Text {
+                layout: name.layout,
+                x: name_x,
                 y,
                 tone: Tone::Primary,
             });
-            prims.push(Prim::Text {
-                x: CARD_PAD + inner - value.width,
-                y,
-                layout: value.layout,
-                tone: Self::value_tone(row),
-            });
-            y += line_height + 6.0;
-            prims.push(Prim::Bar {
-                x: CARD_PAD,
-                y: y + BAR_THICKNESS / 2.0,
-                width: inner,
-                row: index,
-                color: row.color,
-            });
-            y += BAR_THICKNESS + 6.0;
-            let detail = match row.resets_at.filter(|reset| *reset > now) {
-                Some(reset) if row.progress.is_some() => crate::i18n::format(
-                    "taskbar-card-resets",
-                    &[
-                        ("time", super::model::countdown(reset, now)),
-                        ("clock", super::model::reset_clock(reset)),
-                    ],
-                ),
-                _ if row.progress.is_none() => crate::i18n::tr("taskbar-card-no-data").to_owned(),
-                _ => String::new(),
-            };
-            if !detail.is_empty() {
-                let detail = self.line(&detail, 12.0, Weight::Regular)?;
-                let height = detail.height;
+            if let Some(plan) = &section.plan {
+                let plan = self.line(plan, 12.0, Weight::Regular)?;
                 prims.push(Prim::Text {
-                    layout: detail.layout,
+                    x: name_x + name_width + 6.0,
+                    y: y + name_height - plan.height - 1.0,
+                    layout: plan.layout,
+                    tone: Tone::Secondary,
+                });
+            }
+            y += name_height + 10.0;
+            for (row_index, row) in section.rows.iter().enumerate() {
+                if row_index > 0 {
+                    y += 12.0;
+                }
+                let label = self.line(&row.full_label, 12.0, Weight::Regular)?;
+                let value_text = if row.progress.is_some() {
+                    let key = match row.limit_value {
+                        crate::settings::LimitValue::Remaining => "taskbar-card-left",
+                        crate::settings::LimitValue::Used => "taskbar-card-used",
+                    };
+                    crate::i18n::format(key, &[("value", row.value.clone())])
+                } else {
+                    row.value.clone()
+                };
+                let value = self.line(&value_text, 12.0, Weight::Semibold)?;
+                let line_height = label.height.max(value.height);
+                prims.push(Prim::Text {
+                    layout: label.layout,
                     x: CARD_PAD,
                     y,
-                    tone: Tone::Secondary,
+                    tone: Tone::Primary,
+                });
+                prims.push(Prim::Text {
+                    x: CARD_PAD + inner - value.width,
+                    y,
+                    layout: value.layout,
+                    tone: Self::value_tone(row),
+                });
+                y += line_height + 6.0;
+                prims.push(Prim::Bar {
+                    x: CARD_PAD,
+                    y: y + BAR_THICKNESS / 2.0,
+                    width: inner,
+                    row: bar,
+                    color: row.color,
+                    pace: row.pace,
+                });
+                bar += 1;
+                y += BAR_THICKNESS + 6.0;
+                let detail = match row.resets_at.filter(|reset| *reset > now) {
+                    Some(reset) if row.progress.is_some() => crate::i18n::format(
+                        "taskbar-card-resets",
+                        &[
+                            ("time", super::model::countdown(reset, now)),
+                            ("clock", super::model::reset_clock(reset)),
+                        ],
+                    ),
+                    _ if row.progress.is_none() => {
+                        crate::i18n::tr("taskbar-card-no-data").to_owned()
+                    }
+                    _ => String::new(),
+                };
+                if !detail.is_empty() {
+                    let detail = self.line(&detail, 12.0, Weight::Regular)?;
+                    let height = detail.height;
+                    prims.push(Prim::Text {
+                        layout: detail.layout,
+                        x: CARD_PAD,
+                        y,
+                        tone: Tone::Secondary,
+                    });
+                    y += height;
+                }
+            }
+            if let Some(today) = &section.today {
+                y += 12.0;
+                let label = self.line(crate::i18n::tr("today"), 12.0, Weight::Regular)?;
+                let value = self.line(today, 12.0, Weight::Semibold)?;
+                let height = label.height.max(value.height);
+                prims.push(Prim::Text {
+                    layout: label.layout,
+                    x: CARD_PAD,
+                    y,
+                    tone: Tone::Primary,
+                });
+                prims.push(Prim::Text {
+                    x: CARD_PAD + inner - value.width,
+                    y,
+                    layout: value.layout,
+                    tone: Tone::Primary,
                 });
                 y += height;
             }
@@ -1172,13 +1819,17 @@ impl Renderer {
         scale: f32,
         appearance: Appearance,
         view: &WidgetView,
-        progress: &[Option<f32>],
         opacity: f32,
         rise: f32,
         now: DateTime<Utc>,
     ) -> windows::core::Result<()> {
         self.set_dpi(scale)?;
         let (height, prims) = self.card_content(view, now)?;
+        let progress = view
+            .card
+            .iter()
+            .flat_map(|section| section.rows.iter().map(|row| row.progress))
+            .collect::<Vec<_>>();
         let bounds = RECT {
             left: 0,
             top: 0,
@@ -1187,7 +1838,8 @@ impl Renderer {
         };
         let metrics = Metrics {
             scale,
-            height: height + CARD_MARGIN * 2.0,
+            thickness: height + CARD_MARGIN * 2.0,
+            vertical: false,
         };
         let opacity = opacity.clamp(0.0, 1.0);
         unsafe {
@@ -1262,7 +1914,7 @@ impl Renderer {
                 .SetTransform(&windows_numerics::Matrix3x2::translation(left, top));
         }
         for prim in prims {
-            self.paint_prim(prim, progress, metrics, appearance, opacity);
+            self.paint_prim(prim, &progress, metrics, appearance, opacity);
         }
         unsafe {
             self.target
@@ -1323,15 +1975,14 @@ pub(crate) fn snapshot(
         BI_RGB, BITMAPINFO, BITMAPINFOHEADER, CreateCompatibleDC, CreateDIBSection, DIB_RGB_COLORS,
         DeleteDC, DeleteObject, SelectObject,
     };
-    let now = Utc::now();
     let mut widths = Vec::with_capacity(views.len());
     for view in views {
-        widths.push(renderer.measure(view, metrics, now).ok()?);
+        widths.push(renderer.measure(view, metrics).ok()?);
     }
     let gap = super::WIDGET_GAP;
     let total = widths.iter().sum::<f32>() + gap * widths.len().saturating_sub(1) as f32;
     let width = (total * metrics.scale).ceil().max(1.0) as i32;
-    let height = (metrics.height * metrics.scale).round().max(1.0) as i32;
+    let height = (metrics.thickness * metrics.scale).round().max(1.0) as i32;
     let progress = views
         .iter()
         .map(|view| view.rows.iter().map(|row| row.progress).collect::<Vec<_>>())
@@ -1345,8 +1996,8 @@ pub(crate) fn snapshot(
         .map(|(index, ((view, width), progress))| {
             let item = Item {
                 view,
-                x,
-                width: *width,
+                offset: x,
+                length: *width,
                 hover: if hovered == Some(index) { 1.0 } else { 0.0 },
                 press: 0.0,
                 opacity: 1.0,
@@ -1383,7 +2034,7 @@ pub(crate) fn snapshot(
         }
         let previous = SelectObject(dc, dib);
         let painted = renderer
-            .paint(dc, (width, height), metrics, appearance, &items, now)
+            .paint(dc, (width, height), metrics, appearance, &items)
             .is_ok();
         let pixels = std::slice::from_raw_parts(bits as *const u8, (width * height * 4) as usize);
         let rgba = painted.then(|| {
