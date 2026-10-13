@@ -3847,3 +3847,229 @@ popup-shortcut-in-use = { "" }
 # English source:
 # clear-shortcut = Remove shortcut
 clear-shortcut = { "" }
+
+# English source:
+# taskbar = Taskbar
+taskbar = { "" }
+
+# English source:
+# preview = Preview
+preview = { "" }
+
+# English source:
+# taskbar-page-caption = Live usage widgets drawn inside the Windows taskbar, next to the clock. They follow the taskbar's theme; click one to open the popup on its provider.
+taskbar-page-caption = { "" }
+
+# English source:
+# taskbar-show-widgets = Show widgets on the taskbar
+taskbar-show-widgets = { "" }
+
+# English source:
+# taskbar-show-widgets-description = Draws the widgets below inside the Windows taskbar.
+taskbar-show-widgets-description = { "" }
+
+# English source:
+# taskbar-position = Position
+taskbar-position = { "" }
+
+# English source:
+# taskbar-position-description = Where the widgets sit on the taskbar. The start suits centered taskbar icons best.
+taskbar-position-description = { "" }
+
+# English source:
+# taskbar-position-tray = Next to the notification area
+taskbar-position-tray = { "" }
+
+# English source:
+# taskbar-position-start = At the start of the taskbar
+taskbar-position-start = { "" }
+
+# English source:
+# taskbar-widgets = Widgets
+taskbar-widgets = { "" }
+
+# English source:
+# taskbar-no-widgets = No widgets yet
+taskbar-no-widgets = { "" }
+
+# English source:
+# taskbar-no-widgets-description = Add a widget to show a quota on the taskbar.
+taskbar-no-widgets-description = { "" }
+
+# English source:
+# taskbar-show-provider-icon = Show the provider icon
+taskbar-show-provider-icon = { "" }
+
+# English source:
+# taskbar-style-glance = Glance
+taskbar-style-glance = { "" }
+
+
+# English source:
+# taskbar-style-glance-hint = The provider icon beside two lines of text, like the weather button.
+taskbar-style-glance-hint = { "" }
+
+# English source:
+# taskbar-style-rings-hint = A progress ring per quota with its value beside it.
+taskbar-style-rings-hint = { "" }
+
+# English source:
+# taskbar-style-bars-hint = Thin progress bars stacked beside the provider icon.
+taskbar-style-bars-hint = { "" }
+
+
+# English source:
+# taskbar-menu-open = Open Codex Minibar
+taskbar-menu-open = { "" }
+
+# English source:
+# taskbar-menu-settings = Taskbar widget settings
+taskbar-menu-settings = { "" }
+
+# English source:
+# taskbar-menu-hide = Hide taskbar widgets
+taskbar-menu-hide = { "" }
+
+# English source:
+# taskbar-card-left = { $value } left
+taskbar-card-left = { "" }
+
+# English source:
+# taskbar-card-used = { $value } used
+taskbar-card-used = { "" }
+
+# English source:
+# taskbar-card-resets = Resets in { $time } · { $clock }
+taskbar-card-resets = { "" }
+
+# English source:
+# taskbar-card-no-data = Waiting for data
+taskbar-card-no-data = { "" }
+
+# English source:
+# taskbar-card-hint = Click to open · Right-click for options
+taskbar-card-hint = { "" }
+
+# English source:
+# short-5h = 5h
+short-5h = { "" }
+
+# English source:
+# short-7d = 7d
+short-7d = { "" }
+
+# English source:
+# taskbar-style-nested = Nested rings
+taskbar-style-nested = { "" }
+
+# English source:
+# taskbar-style-dials = Dials
+taskbar-style-dials = { "" }
+
+# English source:
+# taskbar-style-meters = Meters
+taskbar-style-meters = { "" }
+
+# English source:
+# taskbar-style-nested-hint = Concentric rings in the space of one, with values beside them if you like.
+taskbar-style-nested-hint = { "" }
+
+# English source:
+# taskbar-style-dials-hint = A small ring per quota with the number inside it.
+taskbar-style-dials-hint = { "" }
+
+# English source:
+# taskbar-style-meters-hint = Slim level columns, like a battery gauge.
+taskbar-style-meters-hint = { "" }
+
+# English source:
+# taskbar-show-provider-icon-description = The provider's mark at the start of the widget.
+taskbar-show-provider-icon-description = { "" }
+
+# English source:
+# taskbar-show-labels = Show labels
+taskbar-show-labels = { "" }
+
+# English source:
+# taskbar-show-labels-description = Short names like 5h and 7d next to the values.
+taskbar-show-labels-description = { "" }
+
+# English source:
+# taskbar-show-values = Show percentages
+taskbar-show-values = { "" }
+
+# English source:
+# taskbar-show-values-description = The quota percentages on the widget.
+taskbar-show-values-description = { "" }
+
+# English source:
+# taskbar-show-pace = Show pace
+taskbar-show-pace = { "" }
+
+# English source:
+# taskbar-show-pace-description = A mark where usage would be right now at an even burn.
+taskbar-show-pace-description = { "" }
+
+# English source:
+# taskbar-menu-edit = Edit this widget
+taskbar-menu-edit = { "" }
+
+# English source:
+# taskbar-content = Content
+taskbar-content = { "" }
+
+# English source:
+# taskbar-content-hint = What the widget writes next to its graphic.
+taskbar-content-hint = { "" }
+
+# English source:
+# taskbar-reset-time = Reset time
+taskbar-reset-time = { "" }
+
+# English source:
+# taskbar-reset-time-description = When each quota resets.
+taskbar-reset-time-description = { "" }
+
+# English source:
+# taskbar-reset-off = Off
+taskbar-reset-off = { "" }
+
+# English source:
+# taskbar-reset-countdown = Time left
+taskbar-reset-countdown = { "" }
+
+# English source:
+# taskbar-reset-clock = Clock time
+taskbar-reset-clock = { "" }
+
+# English source:
+# taskbar-cycle = Cycle widgets with the scroll wheel
+taskbar-cycle = { "" }
+
+# English source:
+# taskbar-cycle-description = Shows one widget at a time; scroll over it to switch to the next.
+taskbar-cycle-description = { "" }
+
+# English source:
+# taskbar-card-tokens = { $count } tokens
+taskbar-card-tokens = { "" }
+
+# English source:
+# taskbar-click = Click opens
+taskbar-click = { "" }
+
+# English source:
+# taskbar-click-description = The popup page a click on a widget opens.
+taskbar-click-description = { "" }
+
+# English source:
+# taskbar-click-nearest = Home, or the tab if not on Home
+taskbar-click-nearest = { "" }
+
+# English source:
+# taskbar-click-tab = Provider tab
+taskbar-click-tab = { "" }
+
+# English source:
+# taskbar-click-home = Home
+taskbar-click-home = { "" }

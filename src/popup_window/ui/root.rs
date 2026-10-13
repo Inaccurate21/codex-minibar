@@ -126,6 +126,8 @@ pub(super) struct Host {
     #[cfg(windows)]
     backdrop: Option<super::backdrop::Backdrop>,
     pub(super) monitor: Option<super::Monitor>,
+    /// The work-area corner the popup stands in.
+    pub(super) placement: super::Placement,
     pub(super) phase: Phase,
     pub(super) height: Spring,
     pub(super) width: Spring,
@@ -148,6 +150,7 @@ impl Host {
             #[cfg(windows)]
             backdrop: None,
             monitor: None,
+            placement: super::Placement::default(),
             phase: Phase::Hidden,
             height: Spring::at(f64::from(INITIAL_HEIGHT)),
             width: Spring::at(f64::from(crate::popup::POPUP_WIDTH)),
@@ -183,7 +186,8 @@ impl Host {
         self.monitor.map_or(4096.0, |monitor| {
             #[cfg(windows)]
             {
-                (f64::from(super::host_rect(monitor).height()) / monitor.scale()) as f32
+                (f64::from(super::host_rect(monitor, self.placement).height()) / monitor.scale())
+                    as f32
             }
             #[cfg(not(windows))]
             {
@@ -584,6 +588,32 @@ impl PopupRoot {
         }
     }
 
+    /// The tab showing `provider`: its own, or its driver's group switched
+    /// to it.
+    fn provider_view(&mut self, provider: ProviderId, cx: &mut Context<Self>) -> Option<PopupView> {
+        let tab = model::tab_for_provider(&self.ui, provider)?;
+        if let PopupView::Group(driver) = tab {
+            self.select_group_member(driver, provider, cx);
+        }
+        Some(tab)
+    }
+
+    /// Home when it shows `provider`, otherwise the tab that does, otherwise
+    /// Home anyway.
+    pub(crate) fn nearest_view(
+        &mut self,
+        provider: ProviderId,
+        cx: &mut Context<Self>,
+    ) -> Option<PopupView> {
+        let on_home = model::visible_home_widgets(&self.ui, false)
+            .iter()
+            .any(|widget| model::home_widget_provider(&self.ui, widget) == Some(provider));
+        if on_home {
+            return Some(PopupView::Home);
+        }
+        self.provider_view(provider, cx).or(Some(PopupView::Home))
+    }
+
     fn view_available(&self, view: PopupView) -> bool {
         match view {
             PopupView::Home => true,
@@ -707,16 +737,21 @@ impl PopupRoot {
     pub(crate) fn begin_show(
         &mut self,
         anchor: Option<(i32, i32)>,
+        beside: bool,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> Option<super::ShowPlan> {
         let hwnd = self.host.hwnd?;
         if let Some(view) = take_popup_view_request() {
             let view = match view {
-                PendingPopupView::Home => PopupView::Home,
-                PendingPopupView::Provider(provider) => PopupView::from_provider(provider),
+                PendingPopupView::Home => Some(PopupView::Home),
+                PendingPopupView::Provider(provider) => self.provider_view(provider, cx),
+                PendingPopupView::Nearest(provider) => self.nearest_view(provider, cx),
             };
-            if self.view_available(view) && view != self.pager.current {
+            if let Some(view) = view
+                && self.view_available(view)
+                && view != self.pager.current
+            {
                 // A fresh open starts directly on the requested page.
                 self.pager = reduce_pager(self.pager.clone(), PagerAction::Select(view));
                 self.finish_pager_animation_now();
@@ -732,13 +767,17 @@ impl PopupRoot {
         let monitor = super::win32::monitor_for_point(anchor.0, anchor.1);
         self.host.monitor = Some(monitor);
         self.host.scale = monitor.scale() as f32;
+        // An open popup stays on its side rather than jumping across.
+        if !already_visible {
+            self.host.placement = super::Placement::for_anchor(monitor, anchor, beside);
+        }
         // The system accent can change while the popup is hidden.
         self.accent = theme::accent_ramp(self.ui.accent_color);
         self.refresh_palette(window);
         self.limits = Rc::new(self.state.current_limits());
         self.forced_resets = Rc::new(self.state.current_forced_resets());
         self.provider_statuses = Rc::new(self.state.current_provider_statuses());
-        let rect = super::host_rect(monitor);
+        let rect = super::host_rect(monitor, self.host.placement);
         if !already_visible {
             let closing_offset = match self.host.phase {
                 Phase::Closing(started, from) => Some(closing_offset(
@@ -807,6 +846,7 @@ impl PopupRoot {
         let monitor = super::win32::monitor_for_point(0, 0);
         self.host.monitor = Some(monitor);
         self.host.scale = monitor.scale() as f32;
+        self.host.placement = super::Placement::default();
         self.refresh_palette(window);
         self.limits = Rc::new(self.state.current_limits());
         self.forced_resets = Rc::new(self.state.current_forced_resets());
@@ -821,7 +861,7 @@ impl PopupRoot {
         cx.notify();
         Some(super::ShowPlan {
             hwnd,
-            rect: super::host_rect(monitor),
+            rect: super::host_rect(monitor, self.host.placement),
             first_show: true,
         })
     }
@@ -1206,13 +1246,29 @@ impl PopupRoot {
         let (x, y, width, height) = capsule;
         let target_w = self.host.width.target as f32;
         let target_h = (self.host.height.target as f32).min(viewport.1);
-        let target_x = viewport.0 - self.host.margin() - target_w + offset;
-        let target_y = (viewport.1 - target_h).max(0.0);
+        let (target_x, target_y) = self.capsule_position(viewport, (target_w, target_h), offset);
         let left = x.min(target_x);
         let top = y.min(target_y);
         let right = (x + width).max(target_x + target_w);
         let bottom = (y + height).max(target_y + target_h);
         (left, top, right - left, bottom - top)
+    }
+
+    /// Top-left of a capsule of `size` in the host window, `offset` DIPs
+    /// along its slide toward the screen edge of the placement's side.
+    fn capsule_position(&self, viewport: (f32, f32), size: (f32, f32), offset: f32) -> (f32, f32) {
+        let margin = self.host.margin();
+        let x = if self.host.placement.left {
+            margin - offset
+        } else {
+            viewport.0 - margin - size.0 + offset
+        };
+        let y = if self.host.placement.top {
+            0.0
+        } else {
+            (viewport.1 - size.1).max(0.0)
+        };
+        (x, y)
     }
 
     // ----- hover / tooltip helpers -------------------------------------------
@@ -1590,9 +1646,8 @@ impl Render for PopupRoot {
         let viewport_h = f32::from(viewport.height);
         // A top/side taskbar can leave less work area than 80% of the monitor.
         let capsule_h = capsule_h.min(viewport_h);
-        let margin = self.host.margin();
-        let capsule_x = viewport_w - margin - capsule_w + offset;
-        let capsule_y = (viewport_h - capsule_h).max(0.0);
+        let (capsule_x, capsule_y) =
+            self.capsule_position((viewport_w, viewport_h), (capsule_w, capsule_h), offset);
         self.capsule_origin = point(px(capsule_x), px(capsule_y));
         self.capsule_size = (capsule_w, capsule_h);
         let clip = self.region_bounds(
@@ -1682,24 +1737,33 @@ impl Render for PopupRoot {
         // rounding top and height separately can move the footer by a pixel
         // as the height spring progresses. Only horizontal open/width motion
         // is shared with the capsule; the footer's vertical bounds stay fixed.
-        let chrome_right = margin - offset + CHROME_INSET;
         let chrome_width = (capsule_w - CHROME_INSET * 2.0).max(0.0);
-        let footer = div()
-            .id("popup-pinned-footer")
+        // A popup by a top taskbar hangs from the host's top edge instead.
+        let chrome_bottom = if self.host.placement.top {
+            (viewport_h - capsule_y - capsule_h).max(0.0)
+        } else {
+            0.0
+        };
+        let left_side = self.host.placement.left;
+        let chrome_x = |element: gpui::Stateful<gpui::Div>| {
+            if left_side {
+                element.left(px(capsule_x + CHROME_INSET))
+            } else {
+                element.right(px(viewport_w - capsule_x - capsule_w + CHROME_INSET))
+            }
+        };
+        let footer = chrome_x(div().id("popup-pinned-footer"))
             .absolute()
-            .right(px(chrome_right))
-            .bottom(px(CHROME_INSET))
+            .bottom(px(chrome_bottom + CHROME_INSET))
             .w(px(chrome_width))
             .h(px(self.footer_height()))
             .child(self.render_footer(capsule_w, window, cx));
         let mut chrome = vec![footer.into_any_element()];
         if self.profile_height > 0.001 {
             chrome.push(
-                div()
-                    .id("popup-pinned-profiles")
+                chrome_x(div().id("popup-pinned-profiles"))
                     .absolute()
-                    .right(px(chrome_right))
-                    .bottom(px(CHROME_INSET + self.footer_height()))
+                    .bottom(px(chrome_bottom + CHROME_INSET + self.footer_height()))
                     .w(px(chrome_width))
                     .h(px(self.profile_height))
                     .overflow_hidden()
