@@ -1,6 +1,10 @@
-**What's new, right after updating.** This card is new: from now on, every update ends with a short summary of the release, right here in its notification.
+![Codex Minibar 1.2](hero.png)
 
-![What's new settings in About](whats-new-setting.png)
+**Your limits, right in the taskbar.** Live widgets show your quotas without opening anything. Hover one for details, or click to open Minibar.
 
-- Shows once per version, then stays out of the way
-- Open it again any time from **Settings → About & Updates → View**
+- Taskbar widgets: rings, dials, meters and bars
+- Provider incidents shown as status cards
+- Game mode backs off while you play
+- Quiet hours for notifications
+- Global shortcut to show or hide the popup
+- A short summary like this after every update
