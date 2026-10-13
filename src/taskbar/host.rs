@@ -1047,7 +1047,7 @@ impl Host {
                 null_mut(),
             );
             if !window.is_null() {
-                SetWindowLongPtrW(window, GWL_STYLE, (WS_CHILD | WS_CLIPSIBLINGS) as isize);
+                SetWindowLongPtrW(window, GWL_STYLE, (WS_CHILD | WS_CLIPSIBLINGS) as _);
                 if SetParent(window, geometry.taskbar).is_null() {
                     trace(format!(
                         "Could not attach the taskbar widgets: {}",
