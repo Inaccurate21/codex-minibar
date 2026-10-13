@@ -620,7 +620,11 @@ mod tests {
             .map(|row| row.full_label.clone())
             .collect::<Vec<_>>();
         labels.dedup();
-        assert_eq!(labels.len(), section.rows.len(), "each quota once: {labels:?}");
+        assert_eq!(
+            labels.len(),
+            section.rows.len(),
+            "each quota once: {labels:?}"
+        );
         let weekly = section
             .rows
             .iter()
