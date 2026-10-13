@@ -199,7 +199,11 @@ fn indicator_detail(indicator: &TrayIndicator) -> String {
 }
 
 /// A dialog section title with a one-line hint under it.
-pub(super) fn dialog_section(k: &Kit, title: &'static str, hint: impl Into<SharedString>) -> AnyElement {
+pub(super) fn dialog_section(
+    k: &Kit,
+    title: &'static str,
+    hint: impl Into<SharedString>,
+) -> AnyElement {
     div()
         .flex()
         .flex_col()

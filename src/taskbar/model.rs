@@ -27,7 +27,11 @@ pub(crate) struct Appearance {
 
 impl Appearance {
     pub(crate) fn text(self) -> Rgb {
-        if self.light { [0, 0, 0] } else { [255, 255, 255] }
+        if self.light {
+            [0, 0, 0]
+        } else {
+            [255, 255, 255]
+        }
     }
 
     /// Fluent `TextFillColorPrimary` opacity on this taskbar.
@@ -152,7 +156,12 @@ pub(crate) fn reset_clock(reset: DateTime<Utc>) -> String {
     }
 }
 
-fn row_color(indicator: &TrayIndicator, provider: ProviderId, remaining: Option<u8>, appearance: Appearance) -> (Rgb, bool) {
+fn row_color(
+    indicator: &TrayIndicator,
+    provider: ProviderId,
+    remaining: Option<u8>,
+    appearance: Appearance,
+) -> (Rgb, bool) {
     match indicator.color_mode {
         TrayColorMode::Status => (appearance.status(remaining), remaining.is_some()),
         TrayColorMode::Fixed => (
@@ -341,9 +350,19 @@ mod tests {
             TrayIndicator::new(provider, "codex.session"),
         ];
         widget.style = TaskbarWidgetStyle::Glance;
-        assert_eq!(resolve(&widget, &limits(0, 0), appearance(false)).rows.len(), 2);
+        assert_eq!(
+            resolve(&widget, &limits(0, 0), appearance(false))
+                .rows
+                .len(),
+            2
+        );
         widget.style = TaskbarWidgetStyle::Rings;
-        assert_eq!(resolve(&widget, &limits(0, 0), appearance(false)).rows.len(), 3);
+        assert_eq!(
+            resolve(&widget, &limits(0, 0), appearance(false))
+                .rows
+                .len(),
+            3
+        );
     }
 
     #[test]
@@ -351,7 +370,11 @@ mod tests {
         let provider = ProviderId::primary(ProviderKind::Codex);
         let mut widget = TaskbarWidget::for_provider(provider);
         widget.show_icon = false;
-        assert!(resolve(&widget, &limits(0, 0), appearance(false)).icon.is_none());
+        assert!(
+            resolve(&widget, &limits(0, 0), appearance(false))
+                .icon
+                .is_none()
+        );
         let widgets = vec![widget];
         assert!(resolve_visible(&widgets, &[], &limits(0, 0), appearance(false)).is_empty());
         assert_eq!(
@@ -364,7 +387,13 @@ mod tests {
     fn countdown_is_compact() {
         let now = Utc::now();
         assert_eq!(countdown(now + chrono::Duration::minutes(45), now), "45m");
-        assert_eq!(countdown(now + chrono::Duration::minutes(133), now), "2h 13m");
-        assert_eq!(countdown(now + chrono::Duration::minutes(3 * 1440 + 240), now), "3d 4h");
+        assert_eq!(
+            countdown(now + chrono::Duration::minutes(133), now),
+            "2h 13m"
+        );
+        assert_eq!(
+            countdown(now + chrono::Duration::minutes(3 * 1440 + 240), now),
+            "3d 4h"
+        );
     }
 }

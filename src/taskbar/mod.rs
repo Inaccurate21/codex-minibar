@@ -7,9 +7,9 @@
 //! longer frames would freeze the taskbar. The bridge thread publishes
 //! settings and limits here and performs the widgets' actions.
 
-pub(crate) mod model;
 #[cfg(windows)]
 mod host;
+pub(crate) mod model;
 #[cfg(windows)]
 mod obstacles;
 #[cfg(windows)]
@@ -256,12 +256,13 @@ mod tests {
                     colored_icons: true,
                     accent: [0, 120, 212],
                 };
-                let preview = preview(&widgets, &limits, appearance, scale, 48.0)
-                    .expect("the strip renders");
+                let preview =
+                    preview(&widgets, &limits, appearance, scale, 48.0).expect("the strip renders");
                 assert!(preview.width > 200.0);
                 assert!((preview.height - 48.0).abs() < 1.0);
                 if let Ok(dir) = std::env::var("TASKBAR_PREVIEW_DIR") {
-                    let name = format!("strip-{}-{scale}.png", if light { "light" } else { "dark" });
+                    let name =
+                        format!("strip-{}-{scale}.png", if light { "light" } else { "dark" });
                     std::fs::write(std::path::Path::new(&dir).join(name), &preview.png).unwrap();
                 }
             }

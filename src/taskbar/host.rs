@@ -28,18 +28,21 @@ use windows_sys::Win32::{
     System::LibraryLoader::GetModuleHandleW,
     UI::{
         HiDpi::GetDpiForWindow,
-        Input::KeyboardAndMouse::{ReleaseCapture, SetCapture, TME_LEAVE, TRACKMOUSEEVENT, TrackMouseEvent},
+        Input::KeyboardAndMouse::{
+            ReleaseCapture, SetCapture, TME_LEAVE, TRACKMOUSEEVENT, TrackMouseEvent,
+        },
         WindowsAndMessaging::{
             AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu,
-            DestroyWindow, DispatchMessageW, FindWindowExW, FindWindowW, GW_CHILD, GetClientRect,
-            GetCursorPos, GetMessageW, GetWindow, GetWindowRect, HMENU, HWND_MESSAGE, HWND_TOP,
-            IDC_ARROW, IsWindow, KillTimer, LoadCursorW, MF_SEPARATOR, MF_STRING, MSG,
-            PostMessageW, RegisterClassW, SW_SHOWNA, SWP_NOACTIVATE, SWP_NOMOVE,
-            SWP_NOSIZE, SWP_NOZORDER, SetForegroundWindow, SetTimer, SetWindowPos, ShowWindow,
-            TPM_BOTTOMALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, TrackPopupMenuEx, TranslateMessage,
-            ULW_ALPHA, UpdateLayeredWindow, WM_APP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
-            WM_RBUTTONUP, WM_TIMER, WNDCLASSW, GWL_STYLE, SetParent, SetWindowLongPtrW, WS_CHILD, WS_CLIPSIBLINGS, WS_EX_LAYERED, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
-            WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+            DestroyWindow, DispatchMessageW, FindWindowExW, FindWindowW, GW_CHILD, GWL_STYLE,
+            GetClientRect, GetCursorPos, GetMessageW, GetWindow, GetWindowRect, HMENU,
+            HWND_MESSAGE, HWND_TOP, IDC_ARROW, IsWindow, KillTimer, LoadCursorW, MF_SEPARATOR,
+            MF_STRING, MSG, PostMessageW, RegisterClassW, SW_SHOWNA, SWP_NOACTIVATE, SWP_NOMOVE,
+            SWP_NOSIZE, SWP_NOZORDER, SetForegroundWindow, SetParent, SetTimer, SetWindowLongPtrW,
+            SetWindowPos, ShowWindow, TPM_BOTTOMALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON,
+            TrackPopupMenuEx, TranslateMessage, ULW_ALPHA, UpdateLayeredWindow, WM_APP,
+            WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE, WM_RBUTTONUP, WM_TIMER, WNDCLASSW,
+            WS_CHILD, WS_CLIPSIBLINGS, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+            WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
         },
     },
 };
@@ -586,7 +589,10 @@ impl Host {
     }
 
     fn poll(&mut self) {
-        let geometry = self.config.as_ref().and_then(|config| locate(config.taskbar.alignment));
+        let geometry = self
+            .config
+            .as_ref()
+            .and_then(|config| locate(config.taskbar.alignment));
         let appearance = current_appearance(
             self.config
                 .as_ref()
@@ -774,7 +780,12 @@ impl Host {
             slots.insert(index, slot);
         }
         self.slots = slots;
-        if self.hover.as_ref().is_some_and(|id| !self.slots.iter().any(|slot| &slot.view.id == id && !slot.leaving)) {
+        if self.hover.as_ref().is_some_and(|id| {
+            !self
+                .slots
+                .iter()
+                .any(|slot| &slot.view.id == id && !slot.leaving)
+        }) {
             self.hover = None;
         }
         self.render();
@@ -966,7 +977,11 @@ impl Host {
         if !self.ensure_window(geometry, rect) {
             return;
         }
-        if self.surface.as_ref().is_none_or(|surface| surface.size != (width, height)) {
+        if self
+            .surface
+            .as_ref()
+            .is_none_or(|surface| surface.size != (width, height))
+        {
             self.surface = Surface::new((width, height));
         }
         let Some(surface) = self.surface.as_ref() else {
@@ -1059,9 +1074,15 @@ impl Host {
             .map(|(id, x, width)| (id, x + shift, width))
             .collect();
         self.render_card(now);
-        let animating = self.slots.iter().any(|slot| slot.tweens().any(|tween| !tween.done(now)))
+        let animating = self
+            .slots
+            .iter()
+            .any(|slot| slot.tweens().any(|tween| !tween.done(now)))
             || self.slots.iter().any(|slot| slot.leaving)
-            || self.card.as_ref().is_some_and(|card| !card.opacity.done(now) || card.closing);
+            || self
+                .card
+                .as_ref()
+                .is_some_and(|card| !card.opacity.done(now) || card.closing);
         if animating {
             self.start_frames();
         } else {
@@ -1092,7 +1113,11 @@ impl Host {
         let now = Instant::now();
         let animate = self.animate();
         for slot in &mut self.slots {
-            let target = if Some(&slot.view.id) == id.as_ref() { 1.0 } else { 0.0 };
+            let target = if Some(&slot.view.id) == id.as_ref() {
+                1.0
+            } else {
+                0.0
+            };
             let duration = if target > 0.5 { HOVER_IN } else { HOVER_OUT };
             slot.hover.set(target, now, duration, animate);
         }
@@ -1442,7 +1467,10 @@ fn monitor_bounds(window: HWND) -> RECT {
     unsafe {
         let mut info: MONITORINFO = std::mem::zeroed();
         info.cbSize = size_of::<MONITORINFO>() as u32;
-        GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &mut info);
+        GetMonitorInfoW(
+            MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST),
+            &mut info,
+        );
         info.rcMonitor
     }
 }
@@ -1484,8 +1512,12 @@ fn locate(alignment: TaskbarAlignment) -> Option<Geometry> {
         let scale = if dpi == 0 { 1.0 } else { dpi as f32 / 96.0 };
         let anchor = match alignment {
             TaskbarAlignment::Tray => {
-                let tray =
-                    FindWindowExW(taskbar, null_mut(), wide("TrayNotifyWnd").as_ptr(), null_mut());
+                let tray = FindWindowExW(
+                    taskbar,
+                    null_mut(),
+                    wide("TrayNotifyWnd").as_ptr(),
+                    null_mut(),
+                );
                 if tray.is_null() {
                     client.right - (200.0 * scale) as i32
                 } else {

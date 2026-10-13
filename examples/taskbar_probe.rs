@@ -59,7 +59,9 @@ fn main() {
                 widget.indicators.truncate(1);
             }
             if *style == TaskbarWidgetStyle::Bars {
-                widget.indicators.push(TrayIndicator::new(codex, "codex.session"));
+                widget
+                    .indicators
+                    .push(TrayIndicator::new(codex, "codex.session"));
             }
             widget
         })

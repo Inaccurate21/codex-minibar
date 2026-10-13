@@ -124,11 +124,7 @@ enum Prim {
         color: Rgb,
     },
     /// A hairline divider.
-    Rule {
-        x: f32,
-        y: f32,
-        width: f32,
-    },
+    Rule { x: f32, y: f32, width: f32 },
 }
 
 struct Content {
@@ -472,7 +468,10 @@ impl Renderer {
         let font = metrics.line_font();
         let lines = if let [row] = view.rows.as_slice() {
             vec![
-                vec![(self.line(&row.value, font, Weight::Semibold)?, Self::value_tone(row))],
+                vec![(
+                    self.line(&row.value, font, Weight::Semibold)?,
+                    Self::value_tone(row),
+                )],
                 vec![(
                     self.line(&truncate(&view.glance_caption(now)), font, Weight::Regular)?,
                     Tone::Secondary,
@@ -482,8 +481,14 @@ impl Renderer {
             let mut lines = Vec::new();
             for row in &view.rows {
                 lines.push(vec![
-                    (self.line(&truncate(&row.label), font, Weight::Regular)?, Tone::Secondary),
-                    (self.line(&row.value, font, Weight::Semibold)?, Self::value_tone(row)),
+                    (
+                        self.line(&truncate(&row.label), font, Weight::Regular)?,
+                        Tone::Secondary,
+                    ),
+                    (
+                        self.line(&row.value, font, Weight::Semibold)?,
+                        Self::value_tone(row),
+                    ),
                 ]);
             }
             lines
@@ -500,15 +505,27 @@ impl Renderer {
         let font = metrics.line_font();
         let lines = if let [row] = view.rows.as_slice() {
             vec![
-                vec![(self.line(&row.value, font, Weight::Regular)?, Self::value_tone(row))],
-                vec![(self.line(&truncate(&row.label), font, Weight::Regular)?, Tone::Secondary)],
+                vec![(
+                    self.line(&row.value, font, Weight::Regular)?,
+                    Self::value_tone(row),
+                )],
+                vec![(
+                    self.line(&truncate(&row.label), font, Weight::Regular)?,
+                    Tone::Secondary,
+                )],
             ]
         } else {
             let mut lines = Vec::new();
             for row in &view.rows {
                 lines.push(vec![
-                    (self.line(&truncate(&row.label), font, Weight::Regular)?, Tone::Secondary),
-                    (self.line(&row.value, font, Weight::Regular)?, Self::value_tone(row)),
+                    (
+                        self.line(&truncate(&row.label), font, Weight::Regular)?,
+                        Tone::Secondary,
+                    ),
+                    (
+                        self.line(&row.value, font, Weight::Regular)?,
+                        Self::value_tone(row),
+                    ),
                 ]);
             }
             lines
@@ -577,11 +594,8 @@ impl Renderer {
         let top = (metrics.height - pitch * count) / 2.0;
         let bar_x = x + label_width + 6.0;
         let value_x = bar_x + BAR_MULTI + 6.0;
-        for (index, ((label, value), row)) in labels
-            .into_iter()
-            .zip(values)
-            .zip(&view.rows)
-            .enumerate()
+        for (index, ((label, value), row)) in
+            labels.into_iter().zip(values).zip(&view.rows).enumerate()
         {
             let center = top + pitch * (index as f32 + 0.5);
             prims.push(Prim::Text {
@@ -641,8 +655,14 @@ impl Renderer {
             }
             x += diameter + RING_GAP;
             let lines = vec![
-                vec![(self.line(&row.value, font, Weight::Semibold)?, Self::value_tone(row))],
-                vec![(self.line(&truncate(&row.label), font - 1.0, Weight::Regular)?, Tone::Secondary)],
+                vec![(
+                    self.line(&row.value, font, Weight::Semibold)?,
+                    Self::value_tone(row),
+                )],
+                vec![(
+                    self.line(&truncate(&row.label), font - 1.0, Weight::Regular)?,
+                    Tone::Secondary,
+                )],
             ];
             x += Self::stack(lines, x, metrics, false, &mut prims);
         }
@@ -711,7 +731,13 @@ impl Renderer {
         }
     }
 
-    fn paint_item(&mut self, item: &Item<'_>, content: Content, metrics: Metrics, appearance: Appearance) {
+    fn paint_item(
+        &mut self,
+        item: &Item<'_>,
+        content: Content,
+        metrics: Metrics,
+        appearance: Appearance,
+    ) {
         let x = metrics.snap(item.x);
         let plate = D2D1_ROUNDED_RECT {
             rect: rect(x, INSET_Y, x + item.width, metrics.height - INSET_Y),
@@ -819,7 +845,10 @@ impl Renderer {
         match tone {
             Tone::Primary => (appearance.text(), appearance.text_alpha()),
             Tone::Secondary => (appearance.text(), appearance.secondary_alpha()),
-            Tone::Tertiary => (appearance.text(), if appearance.light { 0.447 } else { 0.545 }),
+            Tone::Tertiary => (
+                appearance.text(),
+                if appearance.light { 0.447 } else { 0.545 },
+            ),
             Tone::Tint(rgb) => (rgb, 1.0),
         }
     }
@@ -1264,7 +1293,12 @@ fn rasterize_icon(name: &str, pixels: u32, tint: Rgb) -> Option<Vec<u8>> {
             .flat_map(|pixel| {
                 let alpha = u16::from(pixel.alpha());
                 let channel = |value: u8| ((u16::from(value) * alpha + 127) / 255) as u8;
-                [channel(tint[2]), channel(tint[1]), channel(tint[0]), pixel.alpha()]
+                [
+                    channel(tint[2]),
+                    channel(tint[1]),
+                    channel(tint[0]),
+                    pixel.alpha(),
+                ]
             })
             .collect(),
     )
@@ -1335,7 +1369,14 @@ pub(crate) fn snapshot(
         info.bmiHeader.biBitCount = 32;
         info.bmiHeader.biCompression = BI_RGB;
         let mut bits = std::ptr::null_mut();
-        let dib = CreateDIBSection(dc, &info, DIB_RGB_COLORS, &mut bits, std::ptr::null_mut(), 0);
+        let dib = CreateDIBSection(
+            dc,
+            &info,
+            DIB_RGB_COLORS,
+            &mut bits,
+            std::ptr::null_mut(),
+            0,
+        );
         if dib.is_null() || bits.is_null() {
             DeleteDC(dc);
             return None;
@@ -1358,7 +1399,12 @@ pub(crate) fn snapshot(
                                 .min(255) as u8
                         }
                     };
-                    [straight(pixel[2]), straight(pixel[1]), straight(pixel[0]), alpha]
+                    [
+                        straight(pixel[2]),
+                        straight(pixel[1]),
+                        straight(pixel[0]),
+                        alpha,
+                    ]
                 })
                 .collect::<Vec<_>>()
         });

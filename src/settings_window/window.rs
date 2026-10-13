@@ -1165,10 +1165,7 @@ impl SettingsWindow {
                         self.activation_page(k, cx),
                     ),
                     Tab::Tray => (crate::i18n::tr("tray"), self.tray_page(k, window, cx)),
-                    Tab::Taskbar => (
-                        crate::i18n::tr("taskbar"),
-                        self.taskbar_page(k, window, cx),
-                    ),
+                    Tab::Taskbar => (crate::i18n::tr("taskbar"), self.taskbar_page(k, window, cx)),
                     Tab::Notifications => (
                         crate::i18n::tr("notifications"),
                         self.notifications_page(k, cx),

@@ -131,7 +131,12 @@ impl SettingsWindow {
     }
 
     /// A widget on a slice of taskbar, as tall as the real one.
-    fn taskbar_tile(&mut self, key: String, widgets: &[TaskbarWidget], window: &Window) -> AnyElement {
+    fn taskbar_tile(
+        &mut self,
+        key: String,
+        widgets: &[TaskbarWidget],
+        window: &Window,
+    ) -> AnyElement {
         let light = crate::taskbar::uses_light_theme();
         div()
             .h(px(TASKBAR_HEIGHT))
@@ -183,11 +188,7 @@ impl SettingsWindow {
         } else {
             bar.child(div().flex_1()).children(strip)
         };
-        bar.child(
-                div()
-                    .px(px(6.0))
-                    .child(kit::icon("caret-up", 12.0, text)),
-            )
+        bar.child(div().px(px(6.0)).child(kit::icon("caret-up", 12.0, text)))
             .child(clock)
             .into_any_element()
     }
@@ -196,7 +197,9 @@ impl SettingsWindow {
         for widget in &mut widgets {
             widget.normalize();
         }
-        self.edit(cx, move |settings| settings.taskbar.widgets = widgets.clone());
+        self.edit(cx, move |settings| {
+            settings.taskbar.widgets = widgets.clone()
+        });
     }
 
     pub(super) fn update_taskbar_widgets(
