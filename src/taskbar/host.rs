@@ -795,12 +795,6 @@ impl Host {
         }
         let metrics = metrics_for(geometry);
         let animate = self.animate() && self.shown;
-        let mut widths = Vec::with_capacity(views.len());
-        if let Some(renderer) = self.renderer.as_mut() {
-            for view in &views {
-                widths.push(renderer.measure(view, metrics).unwrap_or(0.0));
-            }
-        }
         super::obstacles::set_wanted(!views.is_empty());
         self.obstacles = super::obstacles::latest();
         // A first show waits briefly for the measurement instead of flashing
@@ -814,7 +808,12 @@ impl Host {
         self.awaiting_obstacles = None;
         let (leading, available) = free_span(geometry, self.obstacles);
         self.leading = leading;
-        let (views, widths) = fit(views, widths, available / metrics.scale);
+        let (views, widths) = match self.renderer.as_mut() {
+            Some(renderer) => fit(views, available / metrics.scale, |view| {
+                renderer.measure(view, metrics).unwrap_or(0.0)
+            }),
+            None => (Vec::new(), Vec::new()),
+        };
 
         let mut previous = std::mem::take(&mut self.slots)
             .into_iter()
@@ -1638,23 +1637,49 @@ fn free_span(geometry: Geometry, obstacles: Option<Obstacles>) -> (i32, f32) {
     }
 }
 
-/// Keeps widgets in order while they fit `available` DIPs; the rest
-/// overflow, the way notification icons do.
-fn fit(views: Vec<WidgetView>, widths: Vec<f32>, available: f32) -> (Vec<WidgetView>, Vec<f32>) {
-    let mut used = 0.0;
-    views
-        .into_iter()
-        .zip(widths)
-        .enumerate()
-        .take_while(|(index, (_, width))| {
-            let next = used + width + if *index > 0 { WIDGET_GAP } else { 0.0 };
-            let fits = next <= available + 0.5;
-            if fits {
-                used = next;
+/// Keeps as many widgets, in order, as fit `available` DIPs, giving up
+/// detail on all of them (see [`WidgetView::compacted`]) before a widget
+/// overflows the way notification icons do. The first widget always stays,
+/// at its most compact, even where it has to cover Explorer's buttons.
+fn fit(
+    views: Vec<WidgetView>,
+    available: f32,
+    mut measure: impl FnMut(&WidgetView) -> f32,
+) -> (Vec<WidgetView>, Vec<f32>) {
+    if views.is_empty() {
+        return (Vec::new(), Vec::new());
+    }
+    let length = |layout: &[(WidgetView, f32)], count: usize| {
+        layout[..count].iter().map(|(_, width)| width).sum::<f32>()
+            + WIDGET_GAP * count.saturating_sub(1) as f32
+    };
+    // Measured lazily: a roomy taskbar only ever needs the full layout.
+    let mut layouts: Vec<Vec<(WidgetView, f32)>> = Vec::new();
+    for count in (1..=views.len()).rev() {
+        for level in 0..=model::COMPACT_LEVELS {
+            let index = usize::from(level);
+            if layouts.len() <= index {
+                layouts.push(
+                    views
+                        .iter()
+                        .map(|view| {
+                            let view = view.compacted(level);
+                            let width = measure(&view);
+                            (view, width)
+                        })
+                        .collect(),
+                );
             }
-            fits
-        })
-        .map(|(_, pair)| pair)
+            if length(&layouts[index], count) <= available + 0.5 {
+                return layouts.swap_remove(index).into_iter().take(count).unzip();
+            }
+        }
+    }
+    layouts
+        .pop()
+        .unwrap_or_default()
+        .into_iter()
+        .take(1)
         .unzip()
 }
 
@@ -1788,5 +1813,64 @@ fn locate(alignment: TaskbarAlignment) -> Option<Geometry> {
             alignment,
             origin: (origin.x, origin.y),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        instances::ProviderId,
+        settings::{ProviderKind, TaskbarResetDisplay, TaskbarWidget, TaskbarWidgetStyle},
+    };
+
+    fn bars(count: usize) -> Vec<WidgetView> {
+        let appearance = Appearance {
+            light: false,
+            colored_icons: true,
+            accent: [0, 120, 212],
+        };
+        (0..count)
+            .map(|_| {
+                let widget = TaskbarWidget {
+                    style: TaskbarWidgetStyle::Bars,
+                    reset: TaskbarResetDisplay::Countdown,
+                    ..TaskbarWidget::for_provider(ProviderId::primary(ProviderKind::Codex))
+                };
+                model::resolve(&widget, &ProviderLimits::default(), appearance)
+            })
+            .collect()
+    }
+
+    /// A stand-in for the renderer: 20 DIPs of graphics plus the extras.
+    fn width(view: &WidgetView) -> f32 {
+        20.0 + if view.icon.is_some() { 20.0 } else { 0.0 }
+            + if view.show_labels { 10.0 } else { 0.0 }
+            + if view.show_values { 10.0 } else { 0.0 }
+    }
+
+    #[test]
+    fn widgets_shrink_before_they_overflow_and_one_always_stays() {
+        let full = width(&bars(1)[0]);
+        let all = bars(2);
+        let (views, _) = fit(all.clone(), full * 2.0 + WIDGET_GAP, width);
+        assert_eq!(views, all);
+
+        let (views, widths) = fit(bars(2), 2.0 * 20.0 + WIDGET_GAP, width);
+        assert_eq!(views.len(), 2);
+        assert!(
+            views
+                .iter()
+                .all(|view| view.icon.is_none() && !view.has_text())
+        );
+        assert_eq!(widths, [20.0, 20.0]);
+
+        let (views, widths) = fit(bars(2), 30.0, width);
+        assert_eq!(views.len(), 1);
+        assert_eq!(widths, [20.0]);
+
+        let (views, widths) = fit(bars(2), 0.0, width);
+        assert_eq!(views.len(), 1);
+        assert_eq!(widths, [20.0]);
     }
 }

@@ -133,7 +133,36 @@ impl WidgetView {
     pub(crate) fn has_text(&self) -> bool {
         self.show_values || self.show_labels || self.rows.iter().any(|row| row.reset.is_some())
     }
+
+    /// The widget with detail given up to keep its place on a crowded
+    /// taskbar: reset times first, then labels, values and the mark. At
+    /// [`COMPACT_LEVELS`] graphic designs keep only their graphics and text
+    /// designs only their values.
+    pub(crate) fn compacted(&self, level: u8) -> Self {
+        let mut view = self.clone();
+        let graphic = view.style.has_graphic();
+        if level >= 1 {
+            for row in &mut view.rows {
+                row.reset = None;
+            }
+            // A text design whose reset time stood in for the value.
+            view.show_values |= !graphic;
+        }
+        if level >= 2 {
+            view.show_labels = false;
+        }
+        if level >= 3 && graphic {
+            view.show_values = false;
+        }
+        if level >= 4 {
+            view.icon = None;
+        }
+        view
+    }
 }
+
+/// How many steps [`WidgetView::compacted`] takes to the shortest layout.
+pub(crate) const COMPACT_LEVELS: u8 = 4;
 
 /// Compact countdown: `2h 13m`, `3d 4h`, `45m`.
 pub(crate) fn countdown(reset: DateTime<Utc>, now: DateTime<Utc>) -> String {

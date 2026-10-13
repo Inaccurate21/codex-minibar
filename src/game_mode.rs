@@ -19,6 +19,14 @@ use crate::settings::GameMode;
 /// shell call, and a few seconds of delay is invisible next to a game launch.
 const DETECTION_INTERVAL: Duration = Duration::from_secs(5);
 
+/// Consecutive detector samples that must disagree with the current state
+/// before Automatic switches. Screenshot and screen-recording tools cover the
+/// screen with a topmost overlay that the shell reports exactly like a
+/// borderless game; a capture is over within seconds, a game outlasts the
+/// streak. Leaving takes fewer samples, but still rides out a quick Alt+Tab.
+const SAMPLES_TO_ACTIVATE: u32 = 4;
+const SAMPLES_TO_DEACTIVATE: u32 = 2;
+
 /// Polls back off by this factor, never faster than the floors and never
 /// slower than the ceilings below (or the configured interval, if longer),
 /// so a long session still sees its quota move.
@@ -51,33 +59,57 @@ fn mode() -> GameMode {
 /// Applies the settings immediately; called on startup and every commit.
 pub fn apply(mode: GameMode, notify: bool) {
     NOTIFY.store(notify, Ordering::Relaxed);
-    MODE.store(mode.index() as u8, Ordering::Relaxed);
+    let previous = MODE.swap(mode.index() as u8, Ordering::Relaxed);
     if mode == GameMode::Automatic && !DETECTOR_STARTED.swap(true, Ordering::AcqRel) {
         let spawned = std::thread::Builder::new()
             .name("game-mode-detector".into())
-            .spawn(|| {
-                loop {
-                    std::thread::sleep(DETECTION_INTERVAL);
-                    if self::mode() == GameMode::Automatic {
-                        refresh();
-                    }
-                }
-            });
+            .spawn(detect);
         if let Err(error) = spawned {
             DETECTOR_STARTED.store(false, Ordering::Release);
             crate::logger::info(format!("Game mode detector failed to start: {error}"));
         }
     }
-    refresh();
+    // A new mode (or the launch state) applies at once; otherwise unrelated
+    // commits would bypass the detector's debounce.
+    if previous != mode.index() as u8 || !EVALUATED.load(Ordering::Acquire) {
+        set_active(match mode {
+            GameMode::Off => false,
+            GameMode::Always => true,
+            GameMode::Automatic => full_screen_app_running(),
+        });
+    }
 }
 
-/// Re-evaluates whether game mode is active and applies a change.
-fn refresh() {
-    let active = match mode() {
-        GameMode::Off => false,
-        GameMode::Always => true,
-        GameMode::Automatic => full_screen_app_running(),
-    };
+/// Samples the shell and switches Automatic once a change has held for the
+/// required streak.
+fn detect() {
+    let mut streak = 0;
+    loop {
+        std::thread::sleep(DETECTION_INTERVAL);
+        if mode() != GameMode::Automatic {
+            streak = 0;
+            continue;
+        }
+        let detected = full_screen_app_running();
+        if detected == is_active() {
+            streak = 0;
+            continue;
+        }
+        streak += 1;
+        let required = if detected {
+            SAMPLES_TO_ACTIVATE
+        } else {
+            SAMPLES_TO_DEACTIVATE
+        };
+        if streak >= required {
+            streak = 0;
+            set_active(detected);
+        }
+    }
+}
+
+/// Records the activation state and applies a change.
+fn set_active(active: bool) {
     let _guard = APPLY_LOCK
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
