@@ -2730,3 +2730,45 @@ taskbar-click-description = ウィジェットをクリックしたときに開�
 taskbar-click-nearest = ホーム（なければプロバイダーのタブ）
 taskbar-click-tab = プロバイダーのタブ
 taskbar-click-home = ホーム
+
+# src/settings_window/notifications.rs
+follow-do-not-disturb = 応答不可モード中は一時停止
+
+# src/settings_window/notifications.rs
+follow-do-not-disturb-description = Windows の応答不可モードまたは集中モードがオンの間、通知を表示せず音も鳴らしません。自分で開始した操作の結果は表示されます。
+
+# src/settings_window/advanced.rs
+performance = パフォーマンス
+
+# src/settings_window/advanced.rs
+game-mode = ゲームモード
+
+# src/settings_window/advanced.rs
+game-mode-description = 制限と使用状況の確認頻度を下げ、低い優先度で動作し、通知を一時停止します。「自動」では全画面のゲームやアプリが開いている間だけオンになります。
+
+# src/settings.rs
+game-mode-off = オフ
+
+# src/settings.rs
+game-mode-automatic = 自動
+
+# src/settings.rs
+game-mode-always = 常にオン
+
+# src/settings_window/notifications.rs
+notify-game-mode-changes = ゲームモードの切り替え
+
+# src/settings_window/notifications.rs
+notify-game-mode-changes-description = ゲームモードのオン・オフを通知します
+
+# src/notifications.rs
+game-mode-on-title = ゲームモード オン
+
+# src/notifications.rs
+game-mode-on-body = 制限の確認頻度を下げ、通知を一時停止しています
+
+# src/notifications.rs
+game-mode-off-title = ゲームモード オフ
+
+# src/notifications.rs
+game-mode-off-body = 通常の確認と通知に戻りました

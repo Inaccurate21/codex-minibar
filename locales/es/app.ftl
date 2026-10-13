@@ -1861,3 +1861,45 @@ taskbar-click-description = La página del popup que abre un clic en un widget.
 taskbar-click-nearest = Inicio, o la pestaña si no está en Inicio
 taskbar-click-tab = Pestaña del proveedor
 taskbar-click-home = Inicio
+
+# src/settings_window/notifications.rs
+follow-do-not-disturb = Pausar con No molestar
+
+# src/settings_window/notifications.rs
+follow-do-not-disturb-description = Mientras No molestar o Concentración de Windows esté activo, se omiten las notificaciones y los sonidos quedan apagados. Los resultados de tus acciones se siguen mostrando.
+
+# src/settings_window/advanced.rs
+performance = Rendimiento
+
+# src/settings_window/advanced.rs
+game-mode = Modo juego
+
+# src/settings_window/advanced.rs
+game-mode-description = Consulta límites y uso con menos frecuencia, se ejecuta con prioridad baja y pausa las notificaciones. Automático lo activa mientras haya un juego o una app a pantalla completa.
+
+# src/settings.rs
+game-mode-off = Desactivado
+
+# src/settings.rs
+game-mode-automatic = Automático
+
+# src/settings.rs
+game-mode-always = Siempre
+
+# src/settings_window/notifications.rs
+notify-game-mode-changes = Cambios del modo juego
+
+# src/settings_window/notifications.rs
+notify-game-mode-changes-description = Avisa cuando el modo juego se activa o se desactiva
+
+# src/notifications.rs
+game-mode-on-title = Modo juego activado
+
+# src/notifications.rs
+game-mode-on-body = Se consultan los límites con menos frecuencia y se pausan las notificaciones
+
+# src/notifications.rs
+game-mode-off-title = Modo juego desactivado
+
+# src/notifications.rs
+game-mode-off-body = Vuelven las consultas y notificaciones normales

@@ -2757,3 +2757,45 @@ taskbar-click-description = Какую страницу попапа откры�
 taskbar-click-nearest = Главную, а если провайдера там нет — его вкладку
 taskbar-click-tab = Вкладку провайдера
 taskbar-click-home = Главную
+
+# src/settings_window/notifications.rs
+follow-do-not-disturb = Пауза в режиме «Не беспокоить»
+
+# src/settings_window/notifications.rs
+follow-do-not-disturb-description = Пока в Windows включён режим «Не беспокоить» или фокусировка, уведомления пропускаются, а звуки отключены. Результаты ваших действий по-прежнему показываются.
+
+# src/settings_window/advanced.rs
+performance = Производительность
+
+# src/settings_window/advanced.rs
+game-mode = Игровой режим
+
+# src/settings_window/advanced.rs
+game-mode-description = Реже проверяет лимиты и статистику, работает с низким приоритетом и приостанавливает уведомления. «Автоматически» включает его, пока открыта полноэкранная игра или приложение.
+
+# src/settings.rs
+game-mode-off = Выключен
+
+# src/settings.rs
+game-mode-automatic = Автоматически
+
+# src/settings.rs
+game-mode-always = Всегда
+
+# src/settings_window/notifications.rs
+notify-game-mode-changes = Смена игрового режима
+
+# src/settings_window/notifications.rs
+notify-game-mode-changes-description = Сообщает, когда игровой режим включается или выключается
+
+# src/notifications.rs
+game-mode-on-title = Игровой режим включён
+
+# src/notifications.rs
+game-mode-on-body = Лимиты проверяются реже, уведомления приостановлены
+
+# src/notifications.rs
+game-mode-off-title = Игровой режим выключен
+
+# src/notifications.rs
+game-mode-off-body = Обычные проверки и уведомления возобновлены

@@ -606,7 +606,6 @@ enum Decision {
 fn decide(
     state: Option<&State>,
     onboarding_completed: bool,
-    enabled: bool,
     current: &semver::Version,
 ) -> Decision {
     let seen = state
@@ -615,7 +614,6 @@ fn decide(
     match seen {
         Some(seen) if seen >= *current => Decision::Done,
         None if state.is_none() && !onboarding_completed => Decision::Skip,
-        _ if !enabled => Decision::Skip,
         _ => Decision::Show,
     }
 }
@@ -682,23 +680,15 @@ pub fn show_on_demand() {
 /// fetch it in the background and post it as a notification.
 pub fn start(settings: &Settings, just_updated: bool) {
     let onboarding_completed = settings.onboarding_completed;
-    let enabled = settings.show_whats_new;
     let spawned = thread::Builder::new()
         .name("whats-new".into())
-        .spawn(move || run(onboarding_completed, enabled, just_updated));
+        .spawn(move || run(onboarding_completed, just_updated));
     if let Err(error) = spawned {
         eprintln!("could not start the what's new check: {error}");
     }
 }
 
-/// The setting as it is now: it may be turned off while the summary loads.
-fn still_enabled() -> bool {
-    Settings::default_path()
-        .and_then(|path| Settings::load_or_create(&path))
-        .map_or(true, |settings| settings.show_whats_new)
-}
-
-fn run(onboarding_completed: bool, enabled: bool, just_updated: bool) {
+fn run(onboarding_completed: bool, just_updated: bool) {
     let current = crate::updater::current_version();
     let version = current.to_string();
     let path = match state_path() {
@@ -709,7 +699,7 @@ fn run(onboarding_completed: bool, enabled: bool, just_updated: bool) {
         }
     };
     let mut state = load_state(&path);
-    match decide(state.as_ref(), onboarding_completed, enabled, &current) {
+    match decide(state.as_ref(), onboarding_completed, &current) {
         Decision::Done => return,
         Decision::Skip => {
             mark_seen(&version);
@@ -735,10 +725,8 @@ fn run(onboarding_completed: bool, enabled: bool, just_updated: bool) {
         match fetch(&version, crate::i18n::current_language()) {
             Ok(Fetched::Ready(content)) => {
                 mark_seen(&version);
-                if still_enabled() {
-                    // Later attempts arrive after the update card is gone.
-                    notify(notification(content, just_updated && attempt == 0));
-                }
+                // Later attempts arrive after the update card is gone.
+                notify(notification(content, just_updated && attempt == 0));
                 return;
             }
             Ok(Fetched::Missing) if Utc::now() - pending_since > MISSING_GRACE => {
@@ -876,24 +864,14 @@ mod tests {
             seen_version: Some(version.into()),
             pending_since: None,
         };
-        assert_eq!(decide(None, false, true, &current), Decision::Skip);
-        assert_eq!(decide(None, true, true, &current), Decision::Show);
-        assert_eq!(decide(None, true, false, &current), Decision::Skip);
-        assert_eq!(
-            decide(Some(&seen("1.1.0")), true, true, &current),
-            Decision::Show
-        );
-        assert_eq!(
-            decide(Some(&seen("1.2.0")), true, true, &current),
-            Decision::Done
-        );
-        assert_eq!(
-            decide(Some(&seen("1.3.0")), true, true, &current),
-            Decision::Done
-        );
+        assert_eq!(decide(None, false, &current), Decision::Skip);
+        assert_eq!(decide(None, true, &current), Decision::Show);
+        assert_eq!(decide(Some(&seen("1.1.0")), true, &current), Decision::Show);
+        assert_eq!(decide(Some(&seen("1.2.0")), true, &current), Decision::Done);
+        assert_eq!(decide(Some(&seen("1.3.0")), true, &current), Decision::Done);
         // Unreadable state never re-enters the fresh-install path.
         assert_eq!(
-            decide(Some(&State::default()), false, true, &current),
+            decide(Some(&State::default()), false, &current),
             Decision::Show
         );
     }

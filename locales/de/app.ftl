@@ -2751,3 +2751,45 @@ taskbar-click-description = Die Popup-Seite, die ein Klick auf ein Widget öffne
 taskbar-click-nearest = Startseite, sonst den Tab des Anbieters
 taskbar-click-tab = Tab des Anbieters
 taskbar-click-home = Startseite
+
+# src/settings_window/notifications.rs
+follow-do-not-disturb = Bei „Nicht stören“ pausieren
+
+# src/settings_window/notifications.rs
+follow-do-not-disturb-description = Solange „Nicht stören“ oder Fokus in Windows aktiv ist, werden Benachrichtigungen übersprungen und Töne bleiben aus. Ergebnisse eigener Aktionen werden weiterhin angezeigt.
+
+# src/settings_window/advanced.rs
+performance = Leistung
+
+# src/settings_window/advanced.rs
+game-mode = Spielmodus
+
+# src/settings_window/advanced.rs
+game-mode-description = Prüft Limits und Nutzung seltener, läuft mit niedriger Priorität und pausiert Benachrichtigungen. „Automatisch“ aktiviert ihn, solange ein Spiel oder eine App im Vollbild läuft.
+
+# src/settings.rs
+game-mode-off = Aus
+
+# src/settings.rs
+game-mode-automatic = Automatisch
+
+# src/settings.rs
+game-mode-always = Immer an
+
+# src/settings_window/notifications.rs
+notify-game-mode-changes = Wechsel des Spielmodus
+
+# src/settings_window/notifications.rs
+notify-game-mode-changes-description = Meldet, wenn der Spielmodus ein- oder ausgeschaltet wird
+
+# src/notifications.rs
+game-mode-on-title = Spielmodus an
+
+# src/notifications.rs
+game-mode-on-body = Limits werden seltener geprüft, Benachrichtigungen pausiert
+
+# src/notifications.rs
+game-mode-off-title = Spielmodus aus
+
+# src/notifications.rs
+game-mode-off-body = Normale Prüfungen und Benachrichtigungen laufen wieder

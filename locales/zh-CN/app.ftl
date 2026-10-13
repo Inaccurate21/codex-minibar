@@ -1840,3 +1840,45 @@ taskbar-click-description = 单击小组件时打开的弹出窗口页面。
 taskbar-click-nearest = 主页；不在主页时打开其标签页
 taskbar-click-tab = 提供商标签页
 taskbar-click-home = 主页
+
+# src/settings_window/notifications.rs
+follow-do-not-disturb = 勿扰模式时暂停
+
+# src/settings_window/notifications.rs
+follow-do-not-disturb-description = Windows 勿扰或专注模式开启期间，跳过通知并关闭提示音。你主动发起的操作结果仍会显示。
+
+# src/settings_window/advanced.rs
+performance = 性能
+
+# src/settings_window/advanced.rs
+game-mode = 游戏模式
+
+# src/settings_window/advanced.rs
+game-mode-description = 降低额度和用量的检查频率，以低优先级运行并暂停通知。“自动”会在全屏游戏或应用打开时开启。
+
+# src/settings.rs
+game-mode-off = 关闭
+
+# src/settings.rs
+game-mode-automatic = 自动
+
+# src/settings.rs
+game-mode-always = 始终开启
+
+# src/settings_window/notifications.rs
+notify-game-mode-changes = 游戏模式切换
+
+# src/settings_window/notifications.rs
+notify-game-mode-changes-description = 游戏模式开启或关闭时通知
+
+# src/notifications.rs
+game-mode-on-title = 游戏模式已开启
+
+# src/notifications.rs
+game-mode-on-body = 降低额度检查频率并暂停通知
+
+# src/notifications.rs
+game-mode-off-title = 游戏模式已关闭
+
+# src/notifications.rs
+game-mode-off-body = 已恢复正常检查和通知

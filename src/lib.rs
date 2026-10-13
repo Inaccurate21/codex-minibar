@@ -6,6 +6,7 @@ pub mod claude_desktop;
 pub mod codex;
 pub mod cursor;
 pub mod discovery;
+pub mod game_mode;
 pub mod grok;
 pub mod hotkey;
 pub mod i18n;

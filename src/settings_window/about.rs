@@ -163,15 +163,6 @@ impl SettingsWindow {
                     .on_click(kit::handler(|(), _, _| crate::whats_new::show_on_demand()))
                     .render(k),
             )
-            .trailing(kit::toggle(
-                k,
-                "about-whats-new-after-update",
-                self.settings.show_whats_new,
-                false,
-                Self::h(cx, |this, value: bool, _, cx| {
-                    this.edit(cx, move |s| s.show_whats_new = value)
-                }),
-            ))
             .render(k),
         );
         let updates = kit::card(k, update_rows);

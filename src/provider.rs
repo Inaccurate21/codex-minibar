@@ -106,9 +106,9 @@ pub(crate) fn start_provider_worker_with_limits(
             Vec::new()
         },
         history_retention_days: settings.history_retention_days,
-        usage_refresh_interval: Duration::from_secs(settings.usage_refresh_interval.seconds()),
+        usage_refresh_interval: usage_refresh_interval(settings),
         usage_collection_enabled: settings.usage_stats_collection_enabled(provider),
-        limit_refresh_interval: Duration::from_secs(instance.refresh_interval().seconds()),
+        limit_refresh_interval: limit_refresh_interval(instance),
     };
     // A replaced worker can still have queued output. Tag every forwarded
     // event so the bridge rejects anything from an older credential.
@@ -305,6 +305,21 @@ fn start_driver_worker(
             start_worker!(client(), client(), crate::kiro::KiroActivator, false)
         }
     })
+}
+
+/// The quota poll interval an instance's worker uses right now: the
+/// configured one, stretched while game mode is active.
+pub fn limit_refresh_interval(instance: &ProviderInstance) -> Duration {
+    crate::game_mode::stretch_limit_interval(Duration::from_secs(
+        instance.refresh_interval().seconds(),
+    ))
+}
+
+/// The usage scan interval every worker uses right now.
+pub fn usage_refresh_interval(settings: &Settings) -> Duration {
+    crate::game_mode::stretch_usage_interval(Duration::from_secs(
+        settings.usage_refresh_interval.seconds(),
+    ))
 }
 
 /// Whether an instance's worker may start sessions on its own. Shared by

@@ -1861,3 +1861,45 @@ taskbar-click-description = A página do popup que um clique no widget abre.
 taskbar-click-nearest = Início, ou a aba se não estiver no Início
 taskbar-click-tab = Aba do provedor
 taskbar-click-home = Início
+
+# src/settings_window/notifications.rs
+follow-do-not-disturb = Pausar no modo Não incomodar
+
+# src/settings_window/notifications.rs
+follow-do-not-disturb-description = Enquanto o Não incomodar ou o Foco do Windows estiver ativo, as notificações são ignoradas e os sons ficam desligados. Resultados de ações suas continuam aparecendo.
+
+# src/settings_window/advanced.rs
+performance = Desempenho
+
+# src/settings_window/advanced.rs
+game-mode = Modo jogo
+
+# src/settings_window/advanced.rs
+game-mode-description = Verifica limites e uso com menos frequência, roda com prioridade baixa e pausa as notificações. Automático o ativa enquanto um jogo ou app estiver em tela cheia.
+
+# src/settings.rs
+game-mode-off = Desligado
+
+# src/settings.rs
+game-mode-automatic = Automático
+
+# src/settings.rs
+game-mode-always = Sempre
+
+# src/settings_window/notifications.rs
+notify-game-mode-changes = Mudanças do modo jogo
+
+# src/settings_window/notifications.rs
+notify-game-mode-changes-description = Avisa quando o modo jogo liga ou desliga
+
+# src/notifications.rs
+game-mode-on-title = Modo jogo ligado
+
+# src/notifications.rs
+game-mode-on-body = Limites verificados com menos frequência e notificações pausadas
+
+# src/notifications.rs
+game-mode-off-title = Modo jogo desligado
+
+# src/notifications.rs
+game-mode-off-body = Verificações e notificações normais retomadas

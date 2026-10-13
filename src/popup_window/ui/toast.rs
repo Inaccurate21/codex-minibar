@@ -41,8 +41,13 @@ use super::{
 };
 
 const CARD_WIDTH: f32 = 360.0;
+/// Card shadow. GPUI's blur radius is the Gaussian sigma; past two sigmas
+/// the shadow is invisible, so the host region keeps that much around cards.
+const SHADOW_BLUR: f32 = 12.0;
+const SHADOW_OFFSET: f32 = 4.0;
+const SHADOW_REACH: f32 = SHADOW_BLUR * 2.0;
 /// Room around the cards for their shadow.
-const EDGE: f32 = 16.0;
+const EDGE: f32 = SHADOW_REACH + SHADOW_OFFSET;
 const GAP: f32 = 8.0;
 const HOST_HEIGHT: f32 = 620.0;
 const MAX_CARDS: usize = 4;
@@ -667,6 +672,11 @@ impl Render for ToastHost {
         #[cfg(windows)]
         let mut region = Vec::with_capacity(self.cards.len());
         let scale = window.scale_factor();
+        // The host can reach past the work area; the shadow stops at its
+        // bottom so it never makes the taskbar unclickable.
+        #[cfg(windows)]
+        let floor = f32::from(window.viewport_size().height)
+            - (EDGE - crate::popup::EDGE_MARGIN_PX as f32 / scale).max(0.0);
         for (card, (y, height)) in self.cards.iter().zip(frames) {
             let age = now.saturating_duration_since(card.born);
             let (enter, exit) = if animate {
@@ -697,14 +707,15 @@ impl Render for ToastHost {
             let x = EDGE + slide + offset;
             #[cfg(windows)]
             if alpha > 0.0 {
-                // Visible part only: the card slides out past the host edge.
-                let left = ((x - 4.0) * scale).floor() as i32;
-                let right = ((EDGE + CARD_WIDTH + 4.0) * scale).ceil() as i32;
+                // Card and shadow; the card slides out past the host edge.
+                let left = ((x - SHADOW_REACH).max(0.0) * scale).floor() as i32;
+                let right = ((EDGE * 2.0 + CARD_WIDTH) * scale).ceil() as i32;
+                let bottom = (y + height + SHADOW_OFFSET + SHADOW_REACH).min(floor);
                 region.push(super::win32::Rect {
                     left,
-                    top: ((y - 4.0) * scale).floor() as i32,
+                    top: ((y + SHADOW_OFFSET - SHADOW_REACH) * scale).floor() as i32,
                     right: right.max(left),
-                    bottom: ((y + height + 8.0) * scale).ceil() as i32,
+                    bottom: (bottom * scale).ceil() as i32,
                 });
             }
             let hover = self
@@ -1034,8 +1045,8 @@ impl ToastHost {
             })
             .shadow(vec![gpui::BoxShadow {
                 color: gpui::black().alpha(if palette.dark { 0.3 } else { 0.14 }),
-                offset: point(px(0.0), px(4.0)),
-                blur_radius: px(12.0),
+                offset: point(px(0.0), px(SHADOW_OFFSET)),
+                blur_radius: px(SHADOW_BLUR),
                 spread_radius: px(0.0),
             }])
             .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {

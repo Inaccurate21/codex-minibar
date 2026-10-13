@@ -1,12 +1,12 @@
-//! Advanced: rendering, settings import/export, clearing Usage data,
+//! Advanced: game mode, rendering, settings import/export, clearing Usage data,
 //! factory reset.
 
-use gpui::{AnyElement, Context, PathPromptOptions};
+use gpui::{AnyElement, Context, PathPromptOptions, SharedString};
 
 use super::kit::{self, Button, Kit, Row};
 use super::persistence;
 use super::window::SettingsWindow;
-use crate::settings::Settings;
+use crate::settings::{GameMode, Settings};
 use crate::worker::UsageAction;
 
 fn action_row(
@@ -106,7 +106,28 @@ impl SettingsWindow {
                 }),
             )]
         });
+        let game_mode = self.settings.game_mode;
+        let performance = kit::card_of(k, |k| {
+            vec![kit::dropdown_row(
+                k,
+                "advanced-game-mode",
+                crate::i18n::tr("game-mode"),
+                Some(crate::i18n::tr("game-mode-description")),
+                GameMode::ALL
+                    .iter()
+                    .map(|mode| SharedString::from(mode.label()))
+                    .collect(),
+                game_mode.index(),
+                false,
+                Self::h(cx, |this, index: usize, _, cx| {
+                    let mode = GameMode::from_index(index as i32);
+                    this.edit(cx, move |settings| settings.game_mode = mode)
+                }),
+            )]
+        });
         vec![
+            kit::section_heading(k, crate::i18n::tr("performance")),
+            performance,
             kit::section_heading(k, crate::i18n::tr("rendering")),
             rendering,
             kit::section_heading(k, crate::i18n::tr("backup")),

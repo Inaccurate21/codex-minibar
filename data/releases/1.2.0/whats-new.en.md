@@ -4,4 +4,3 @@
 
 - Shows once per version, then stays out of the way
 - Open it again any time from **Settings → About & Updates → View**
-- Turn it off with **Show what's new after updating**

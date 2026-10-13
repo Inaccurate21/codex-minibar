@@ -2758,3 +2758,45 @@ taskbar-click-description = La page du popup qu'ouvre un clic sur un widget.
 taskbar-click-nearest = L'accueil, ou l'onglet s'il n'y figure pas
 taskbar-click-tab = L'onglet du fournisseur
 taskbar-click-home = L'accueil
+
+# src/settings_window/notifications.rs
+follow-do-not-disturb = Pause en mode Ne pas déranger
+
+# src/settings_window/notifications.rs
+follow-do-not-disturb-description = Tant que Ne pas déranger ou Concentration est actif dans Windows, les notifications sont ignorées et les sons coupés. Les résultats de vos actions restent affichés.
+
+# src/settings_window/advanced.rs
+performance = Performances
+
+# src/settings_window/advanced.rs
+game-mode = Mode jeu
+
+# src/settings_window/advanced.rs
+game-mode-description = Vérifie les limites et l’utilisation moins souvent, s’exécute en priorité basse et met les notifications en pause. Automatique l’active tant qu’un jeu ou une app est en plein écran.
+
+# src/settings.rs
+game-mode-off = Désactivé
+
+# src/settings.rs
+game-mode-automatic = Automatique
+
+# src/settings.rs
+game-mode-always = Toujours
+
+# src/settings_window/notifications.rs
+notify-game-mode-changes = Changements du mode jeu
+
+# src/settings_window/notifications.rs
+notify-game-mode-changes-description = Signale l’activation ou la désactivation du mode jeu
+
+# src/notifications.rs
+game-mode-on-title = Mode jeu activé
+
+# src/notifications.rs
+game-mode-on-body = Limites vérifiées moins souvent, notifications en pause
+
+# src/notifications.rs
+game-mode-off-title = Mode jeu désactivé
+
+# src/notifications.rs
+game-mode-off-body = Vérifications et notifications normales rétablies

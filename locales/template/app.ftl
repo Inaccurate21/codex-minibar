@@ -4073,3 +4073,59 @@ taskbar-click-tab = { "" }
 # English source:
 # taskbar-click-home = Home
 taskbar-click-home = { "" }
+
+# English source:
+# follow-do-not-disturb = Pause during Do Not Disturb
+follow-do-not-disturb = { "" }
+
+# English source:
+# follow-do-not-disturb-description = While Windows Do Not Disturb or Focus is on, notifications are skipped and sounds stay off. Results of actions you start still show.
+follow-do-not-disturb-description = { "" }
+
+# English source:
+# performance = Performance
+performance = { "" }
+
+# English source:
+# game-mode = Game mode
+game-mode = { "" }
+
+# English source:
+# game-mode-description = Checks limits and usage less often, runs at low priority and pauses notifications. Automatic turns it on while a full-screen game or app is open.
+game-mode-description = { "" }
+
+# English source:
+# game-mode-off = Off
+game-mode-off = { "" }
+
+# English source:
+# game-mode-automatic = Automatic
+game-mode-automatic = { "" }
+
+# English source:
+# game-mode-always = Always on
+game-mode-always = { "" }
+
+# English source:
+# notify-game-mode-changes = Game mode changes
+notify-game-mode-changes = { "" }
+
+# English source:
+# notify-game-mode-changes-description = Shows when game mode turns on or off
+notify-game-mode-changes-description = { "" }
+
+# English source:
+# game-mode-on-title = Game mode on
+game-mode-on-title = { "" }
+
+# English source:
+# game-mode-on-body = Checking limits less often and pausing notifications
+game-mode-on-body = { "" }
+
+# English source:
+# game-mode-off-title = Game mode off
+game-mode-off-title = { "" }
+
+# English source:
+# game-mode-off-body = Back to normal checks and notifications
+game-mode-off-body = { "" }

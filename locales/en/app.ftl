@@ -2750,3 +2750,45 @@ taskbar-click-description = The popup page a click on a widget opens.
 taskbar-click-nearest = Home, or the tab if not on Home
 taskbar-click-tab = Provider tab
 taskbar-click-home = Home
+
+# src/settings_window/notifications.rs
+follow-do-not-disturb = Pause during Do Not Disturb
+
+# src/settings_window/notifications.rs
+follow-do-not-disturb-description = While Windows Do Not Disturb or Focus is on, notifications are skipped and sounds stay off. Results of actions you start still show.
+
+# src/settings_window/advanced.rs
+performance = Performance
+
+# src/settings_window/advanced.rs
+game-mode = Game mode
+
+# src/settings_window/advanced.rs
+game-mode-description = Checks limits and usage less often, runs at low priority and pauses notifications. Automatic turns it on while a full-screen game or app is open.
+
+# src/settings.rs
+game-mode-off = Off
+
+# src/settings.rs
+game-mode-automatic = Automatic
+
+# src/settings.rs
+game-mode-always = Always on
+
+# src/settings_window/notifications.rs
+notify-game-mode-changes = Game mode changes
+
+# src/settings_window/notifications.rs
+notify-game-mode-changes-description = Shows when game mode turns on or off
+
+# src/notifications.rs
+game-mode-on-title = Game mode on
+
+# src/notifications.rs
+game-mode-on-body = Checking limits less often and pausing notifications
+
+# src/notifications.rs
+game-mode-off-title = Game mode off
+
+# src/notifications.rs
+game-mode-off-body = Back to normal checks and notifications

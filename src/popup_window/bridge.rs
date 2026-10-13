@@ -174,6 +174,23 @@ pub(super) fn update_version_from_phase(phase: &UpdatePhase) -> Option<String> {
     }
 }
 
+/// Sends a worker the poll intervals it should use right now. Workers ignore
+/// an unchanged interval, so resending after any change is safe.
+fn send_refresh_intervals(
+    provider: ProviderId,
+    commands: &std::sync::mpsc::Sender<WorkerCommand>,
+    settings: &Settings,
+) {
+    if let Some(instance) = settings.instance(provider) {
+        let _ = commands.send(WorkerCommand::SetLimitRefreshInterval(
+            crate::provider::limit_refresh_interval(instance),
+        ));
+    }
+    let _ = commands.send(WorkerCommand::SetUsageRefreshInterval(
+        crate::provider::usage_refresh_interval(settings),
+    ));
+}
+
 /// A visible popup or open Settings window needs frame-rate polling (outside
 /// click / Escape dismissal, live preview, settings pushes).
 fn bridge_surface_active() -> bool {
@@ -183,7 +200,14 @@ fn bridge_surface_active() -> bool {
 /// Idle tick is short enough for the 250 ms system-theme check, stream deck
 /// and update toasts; window messages (tray) wake the idle wait immediately.
 fn bridge_poll_interval(active: bool) -> Duration {
-    Duration::from_millis(if active { 16 } else { 100 })
+    Duration::from_millis(if active {
+        16
+    } else if crate::game_mode::is_active() {
+        // Still meets the 250 ms theme check while waking less often.
+        250
+    } else {
+        100
+    })
 }
 
 pub(super) fn start_background_bridge(state: Arc<AppState>) {
@@ -362,14 +386,7 @@ pub(super) fn start_background_bridge(state: Arc<AppState>) {
                 let _ = commands.send(WorkerCommand::SetAutoActivationPauses(
                     crate::provider::auto_activation_pauses_for(provider, &settings),
                 ));
-                if let Some(instance) = settings.instance(provider) {
-                    let _ = commands.send(WorkerCommand::SetLimitRefreshInterval(
-                        Duration::from_secs(instance.refresh_interval().seconds()),
-                    ));
-                }
-                let _ = commands.send(WorkerCommand::SetUsageRefreshInterval(Duration::from_secs(
-                    settings.usage_refresh_interval.seconds(),
-                )));
+                send_refresh_intervals(provider, &commands, &settings);
                 // The worker reloads the selected history range immediately,
                 // so changes are reflected in the open popup without asking the
                 // user to restart the application.
@@ -565,6 +582,11 @@ pub(super) fn start_background_bridge(state: Arc<AppState>) {
                 &mut live_settings,
             );
             drain_updates(&mut ui, &mut tray, &mut update_phase, &mut widgets);
+            if crate::game_mode::take_transition() {
+                for (provider, commands) in state.worker_commands() {
+                    send_refresh_intervals(provider, &commands, &live_settings);
+                }
+            }
             pump_popup_hotkey(&mut hotkey, &live_settings, &mut ui);
             let exit = pump_taskbar_actions(&settings_tx, &mut ui);
             if exit || pump_tray_and_dismiss(&tray, &settings_tx, &state, &mut ui) {

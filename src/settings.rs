@@ -723,6 +723,43 @@ pub enum ProviderKind {
     Kiro,
 }
 
+/// When the app backs off to leave CPU, GPU and network to a game.
+///
+/// While active, provider polls and usage scans run less often, the process
+/// runs at a lower priority with EcoQoS, and notifications are held back.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GameMode {
+    Off,
+    /// While a full-screen game or app is in the foreground.
+    #[default]
+    Automatic,
+    Always,
+}
+
+impl GameMode {
+    pub const ALL: [Self; 3] = [Self::Off, Self::Automatic, Self::Always];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Off => crate::i18n::tr("game-mode-off"),
+            Self::Automatic => crate::i18n::tr("game-mode-automatic"),
+            Self::Always => crate::i18n::tr("game-mode-always"),
+        }
+    }
+
+    pub fn index(self) -> i32 {
+        Self::ALL.iter().position(|mode| *mode == self).unwrap_or(0) as i32
+    }
+
+    pub fn from_index(index: i32) -> Self {
+        usize::try_from(index)
+            .ok()
+            .and_then(|index| Self::ALL.get(index).copied())
+            .unwrap_or_default()
+    }
+}
+
 /// How provider instances map onto popup tabs.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -1965,6 +2002,11 @@ pub struct NotificationSettings {
     pub provider_status_notifications: bool,
     /// Play the kind's sound with each notification.
     pub sound: bool,
+    /// Hold back unsolicited notifications while Windows Do Not Disturb
+    /// (Focus Assist on Windows 10) is on.
+    pub follow_do_not_disturb: bool,
+    /// Notify when game mode turns on or off.
+    pub game_mode_changes: bool,
 }
 
 impl Default for NotificationSettings {
@@ -1985,6 +2027,8 @@ impl Default for NotificationSettings {
             provider_status_enabled: true,
             provider_status_notifications: true,
             sound: true,
+            follow_do_not_disturb: true,
+            game_mode_changes: true,
         }
     }
 }
@@ -2085,10 +2129,10 @@ pub struct Settings {
     pub notifications: NotificationSettings,
     pub history_retention_days: u16,
     pub check_for_updates: bool,
-    /// Shows a short summary of the release once after updating.
-    pub show_whats_new: bool,
     /// Draws every window on the CPU (WARP) instead of the GPU.
     pub software_rendering: bool,
+    /// When background work backs off to leave resources to games.
+    pub game_mode: GameMode,
 }
 
 fn default_show_usage_values() -> bool {
@@ -2150,8 +2194,8 @@ impl Default for Settings {
             notifications: NotificationSettings::default(),
             history_retention_days: 30,
             check_for_updates: true,
-            show_whats_new: true,
             software_rendering: false,
+            game_mode: GameMode::default(),
         }
     }
 }
@@ -2779,6 +2823,8 @@ impl Settings {
         #[cfg(windows)]
         gpui::set_software_rendering(self.software_rendering);
         crate::notifications::set_sound_enabled(self.notifications.sound);
+        crate::notifications::set_follow_do_not_disturb(self.notifications.follow_do_not_disturb);
+        crate::game_mode::apply(self.game_mode, self.notifications.game_mode_changes);
         crate::popup::apply_popup_appearance(
             self.bottom_bar_size,
             self.popup_corner_radius,
