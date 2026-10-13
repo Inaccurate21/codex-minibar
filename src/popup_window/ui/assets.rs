@@ -16,6 +16,11 @@ pub(crate) fn icon_path(name: &str) -> SharedString {
     SharedString::from(format!("icons/{name}.svg"))
 }
 
+/// Monochrome SVG source of an icon, for renderers outside GPUI.
+pub(crate) fn svg_source(name: &str) -> Option<&'static str> {
+    source(name)
+}
+
 fn source(name: &str) -> Option<&'static str> {
     Some(match name {
         "fluent-refresh" => include_str!("../../../assets/icons/fluent-arrow-sync-24-filled.svg"),
@@ -195,6 +200,7 @@ fn color_source(name: &str) -> Option<&'static [u8]> {
             include_bytes!("../../../assets/icons/fluent-color-calendar-clock-24.svg")
         }
         "chat-24" => include_bytes!("../../../assets/icons/fluent-color-chat-24.svg"),
+        "gauge-24" => include_bytes!("../../../assets/icons/fluent-color-gauge-24.svg"),
         "history-24" => include_bytes!("../../../assets/icons/fluent-color-history-24.svg"),
         "home-24" => include_bytes!("../../../assets/icons/fluent-color-home-24.svg"),
         "paint-brush-24" => include_bytes!("../../../assets/icons/fluent-color-paint-brush-24.svg"),
