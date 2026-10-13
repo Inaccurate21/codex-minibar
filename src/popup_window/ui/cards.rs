@@ -632,6 +632,8 @@ impl PopupRoot {
     ) -> AnyElement {
         let palette = self.palette.clone();
         let provider = heading.provider;
+        self.fx
+            .mark_scope(fx::key(("provider-section", provider.kind())));
         // Home headings open their provider's tab, like the Usage Stats title.
         let link_id = fx::key(("heading-link", provider.id()));
         let link = matches!(surface, PopupSurface::HomeTab)
@@ -1744,9 +1746,13 @@ impl PopupRoot {
             element = element.child(layer);
         }
         let element = element.child(div().relative().p(px(12.0)).child(rows));
-        let reveal = self
-            .fx
-            .appear(fx::key(("provider-incidents-reveal", hover_id)), fx::NORMAL);
+        // The heading renders first, so this only grows in for an incident
+        // that arrives while its section is already on screen.
+        let reveal = self.fx.appear_in(
+            fx::key(("provider-incidents-reveal", hover_id)),
+            fx::key(("provider-section", status.kind)),
+            fx::NORMAL,
+        );
         if reveal >= 1.0 {
             return element.into_any_element();
         }
