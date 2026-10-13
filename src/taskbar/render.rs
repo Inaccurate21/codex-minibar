@@ -91,6 +91,7 @@ enum Weight {
 enum Tone {
     Primary,
     Secondary,
+    Tertiary,
     Tint(Rgb),
 }
 
@@ -121,6 +122,12 @@ enum Prim {
         stroke: f32,
         row: usize,
         color: Rgb,
+    },
+    /// A hairline divider.
+    Rule {
+        x: f32,
+        y: f32,
+        width: f32,
     },
 }
 
@@ -812,6 +819,7 @@ impl Renderer {
         match tone {
             Tone::Primary => (appearance.text(), appearance.text_alpha()),
             Tone::Secondary => (appearance.text(), appearance.secondary_alpha()),
+            Tone::Tertiary => (appearance.text(), if appearance.light { 0.447 } else { 0.545 }),
             Tone::Tint(rgb) => (rgb, 1.0),
         }
     }
@@ -860,6 +868,16 @@ impl Renderer {
                     }
                 }
             }
+            Prim::Rule { x, y, width } => unsafe {
+                let one = 1.0 / metrics.scale;
+                self.brush.SetColor(&color(
+                    appearance.text(),
+                    if appearance.light { 0.08 } else { 0.0837 } * opacity,
+                ));
+                let y = metrics.snap(y);
+                self.target
+                    .FillRectangle(&rect(x, y, x + width, y + one), &self.brush);
+            },
             Prim::Bar {
                 x,
                 y,
@@ -976,6 +994,251 @@ impl Renderer {
             sink.EndFigure(D2D1_FIGURE_END_OPEN);
             sink.Close().ok().ok()?;
             Some(path)
+        }
+    }
+}
+
+/// Transparent margin around the hover card that holds its shadow.
+pub(crate) const CARD_MARGIN: f32 = 16.0;
+const CARD_WIDTH: f32 = 272.0;
+const CARD_PAD: f32 = 14.0;
+const CARD_RADIUS: f32 = 8.0;
+
+impl Renderer {
+    /// Hover card content, laid out from the card's top-left corner.
+    fn card_content(
+        &mut self,
+        view: &WidgetView,
+        now: DateTime<Utc>,
+    ) -> windows::core::Result<(f32, Vec<Prim>)> {
+        let mut prims = Vec::new();
+        let inner = CARD_WIDTH - CARD_PAD * 2.0;
+        let mut y = CARD_PAD;
+        let header_provider = view.provider;
+        if let Some(provider) = header_provider {
+            let name = self.line(&provider.qualified_name(), 14.0, Weight::Semibold)?;
+            let icon = view.rows.first().map(|row| row.icon.clone());
+            let mut x = CARD_PAD;
+            if let Some(icon) = icon {
+                prims.push(Prim::Icon {
+                    icon,
+                    x,
+                    y: y + (name.height - 16.0) / 2.0,
+                    size: 16.0,
+                });
+                x += 16.0 + 8.0;
+            }
+            let height = name.height;
+            prims.push(Prim::Text {
+                layout: name.layout,
+                x,
+                y,
+                tone: Tone::Primary,
+            });
+            y += height + 10.0;
+        }
+        for (index, row) in view.rows.iter().enumerate() {
+            if index > 0 {
+                y += 12.0;
+            }
+            let label = if Some(row.provider) == header_provider {
+                row.label.clone()
+            } else {
+                format!("{} \u{00b7} {}", row.provider.qualified_name(), row.label)
+            };
+            let label = self.line(&label, 12.0, Weight::Regular)?;
+            let value_text = if row.progress.is_some() {
+                let key = match row.limit_value {
+                    crate::settings::LimitValue::Remaining => "taskbar-card-left",
+                    crate::settings::LimitValue::Used => "taskbar-card-used",
+                };
+                crate::i18n::format(key, &[("value", row.value.clone())])
+            } else {
+                row.value.clone()
+            };
+            let value = self.line(&value_text, 12.0, Weight::Semibold)?;
+            let line_height = label.height.max(value.height);
+            prims.push(Prim::Text {
+                layout: label.layout,
+                x: CARD_PAD,
+                y,
+                tone: Tone::Primary,
+            });
+            prims.push(Prim::Text {
+                x: CARD_PAD + inner - value.width,
+                y,
+                layout: value.layout,
+                tone: Self::value_tone(row),
+            });
+            y += line_height + 6.0;
+            prims.push(Prim::Bar {
+                x: CARD_PAD,
+                y: y + BAR_THICKNESS / 2.0,
+                width: inner,
+                row: index,
+                color: row.color,
+            });
+            y += BAR_THICKNESS + 6.0;
+            let detail = match row.resets_at.filter(|reset| *reset > now) {
+                Some(reset) if row.progress.is_some() => crate::i18n::format(
+                    "taskbar-card-resets",
+                    &[
+                        ("time", super::model::countdown(reset, now)),
+                        ("clock", super::model::reset_clock(reset)),
+                    ],
+                ),
+                _ if row.progress.is_none() => crate::i18n::tr("taskbar-card-no-data").to_owned(),
+                _ => String::new(),
+            };
+            if !detail.is_empty() {
+                let detail = self.line(&detail, 12.0, Weight::Regular)?;
+                let height = detail.height;
+                prims.push(Prim::Text {
+                    layout: detail.layout,
+                    x: CARD_PAD,
+                    y,
+                    tone: Tone::Secondary,
+                });
+                y += height;
+            }
+        }
+        y += 12.0;
+        prims.push(Prim::Rule {
+            x: 0.0,
+            y,
+            width: CARD_WIDTH,
+        });
+        y += 9.0;
+        let hint = self.line(crate::i18n::tr("taskbar-card-hint"), 11.0, Weight::Regular)?;
+        let height = hint.height;
+        prims.push(Prim::Text {
+            layout: hint.layout,
+            x: CARD_PAD,
+            y,
+            tone: Tone::Tertiary,
+        });
+        y += height + 10.0;
+        Ok((y, prims))
+    }
+
+    /// Size of the hover card window in DIPs, shadow margin included.
+    pub(crate) fn card_size(
+        &mut self,
+        view: &WidgetView,
+        scale: f32,
+        now: DateTime<Utc>,
+    ) -> windows::core::Result<(f32, f32)> {
+        self.set_dpi(scale)?;
+        let (height, _) = self.card_content(view, now)?;
+        Ok((CARD_WIDTH + CARD_MARGIN * 2.0, height + CARD_MARGIN * 2.0))
+    }
+
+    /// Paints the hover card: a Fluent flyout surface with a soft shadow.
+    /// `rise` lifts the card for its entrance, in DIPs.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn paint_card(
+        &mut self,
+        hdc: *mut core::ffi::c_void,
+        size: (i32, i32),
+        scale: f32,
+        appearance: Appearance,
+        view: &WidgetView,
+        progress: &[Option<f32>],
+        opacity: f32,
+        rise: f32,
+        now: DateTime<Utc>,
+    ) -> windows::core::Result<()> {
+        self.set_dpi(scale)?;
+        let (height, prims) = self.card_content(view, now)?;
+        let bounds = RECT {
+            left: 0,
+            top: 0,
+            right: size.0,
+            bottom: size.1,
+        };
+        let metrics = Metrics {
+            scale,
+            height: height + CARD_MARGIN * 2.0,
+        };
+        let opacity = opacity.clamp(0.0, 1.0);
+        unsafe {
+            self.target.BindDC(HDC(hdc), &bounds).ok()?;
+            self.target.BeginDraw();
+            self.target.Clear(Some(&color([0, 0, 0], 0.0)));
+            let top = metrics.snap(CARD_MARGIN + rise);
+            let left = CARD_MARGIN;
+            // Shadow: Fluent flyout depth, 0 8 16 at 14 % (26 % dark).
+            let depth = if appearance.light { 0.14 } else { 0.26 };
+            let steps = 8;
+            for step in 0..steps {
+                let spread = step as f32 * 1.5;
+                let alpha = depth * opacity * (1.0 - step as f32 / steps as f32).powi(2) / 3.0;
+                self.fill(
+                    &D2D1_ROUNDED_RECT {
+                        rect: rect(
+                            left - spread,
+                            top + 6.0 - spread,
+                            left + CARD_WIDTH + spread,
+                            top + height + 6.0 + spread,
+                        ),
+                        radiusX: CARD_RADIUS + spread,
+                        radiusY: CARD_RADIUS + spread,
+                    },
+                    [0, 0, 0],
+                    alpha,
+                );
+            }
+            let surface = D2D1_ROUNDED_RECT {
+                rect: rect(left, top, left + CARD_WIDTH, top + height),
+                radiusX: CARD_RADIUS,
+                radiusY: CARD_RADIUS,
+            };
+            let (background, stroke, stroke_alpha) = if appearance.light {
+                ([249, 249, 249], [0, 0, 0], 0.0578)
+            } else {
+                ([44, 44, 44], [0, 0, 0], 0.32)
+            };
+            self.fill(&surface, background, opacity);
+            let half = 0.5 / scale;
+            let edge = D2D1_ROUNDED_RECT {
+                rect: rect(
+                    left + half,
+                    top + half,
+                    left + CARD_WIDTH - half,
+                    top + height - half,
+                ),
+                radiusX: CARD_RADIUS - half,
+                radiusY: CARD_RADIUS - half,
+            };
+            self.brush.SetColor(&color(stroke, stroke_alpha * opacity));
+            self.target
+                .DrawRoundedRectangle(&edge, &self.brush, half * 2.0, None);
+            if !appearance.light {
+                // Dark flyouts carry a faint light rim inside the dark one.
+                let inner = D2D1_ROUNDED_RECT {
+                    rect: rect(
+                        edge.rect.left + half * 2.0,
+                        edge.rect.top + half * 2.0,
+                        edge.rect.right - half * 2.0,
+                        edge.rect.bottom - half * 2.0,
+                    ),
+                    radiusX: CARD_RADIUS - half * 3.0,
+                    radiusY: CARD_RADIUS - half * 3.0,
+                };
+                self.brush.SetColor(&color([255, 255, 255], 0.06 * opacity));
+                self.target
+                    .DrawRoundedRectangle(&inner, &self.brush, half * 2.0, None);
+            }
+            self.target
+                .SetTransform(&windows_numerics::Matrix3x2::translation(left, top));
+        }
+        for prim in prims {
+            self.paint_prim(prim, progress, metrics, appearance, opacity);
+        }
+        unsafe {
+            self.target
+                .SetTransform(&windows_numerics::Matrix3x2::identity());
+            self.target.EndDraw(None, None).ok()
         }
     }
 }

@@ -38,7 +38,7 @@ use windows_sys::Win32::{
             SWP_NOSIZE, SWP_NOZORDER, SetForegroundWindow, SetTimer, SetWindowPos, ShowWindow,
             TPM_BOTTOMALIGN, TPM_RETURNCMD, TPM_RIGHTBUTTON, TrackPopupMenuEx, TranslateMessage,
             ULW_ALPHA, UpdateLayeredWindow, WM_APP, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
-            WM_RBUTTONUP, WM_TIMER, WNDCLASSW, GWL_STYLE, SetParent, SetWindowLongPtrW, WS_CHILD, WS_CLIPSIBLINGS, WS_EX_LAYERED, WS_POPUP,
+            WM_RBUTTONUP, WM_TIMER, WNDCLASSW, GWL_STYLE, SetParent, SetWindowLongPtrW, WS_CHILD, WS_CLIPSIBLINGS, WS_EX_LAYERED, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
             WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
         },
     },
@@ -47,7 +47,8 @@ use windows_sys::Win32::{
 use super::{
     Action, Config, WIDGET_GAP,
     model::{self, Appearance, WidgetView},
-    render::{Item, Metrics, Renderer},
+    obstacles::Obstacles,
+    render::{CARD_MARGIN, Item, Metrics, Renderer},
 };
 use crate::{limits::ProviderLimits, settings::TaskbarAlignment};
 
@@ -60,6 +61,11 @@ const WM_WAKE: u32 = WM_APP + 1;
 const WM_MOUSELEAVE: u32 = 0x02A3;
 const TIMER_POLL: usize = 1;
 const TIMER_FRAME: usize = 2;
+const TIMER_CARD: usize = 3;
+/// Hover time before the card opens, like a taskbar thumbnail.
+const CARD_DELAY: u32 = 450;
+const CARD_GAP: f32 = 8.0;
+const CARD_RISE: f32 = 8.0;
 const POLL: u32 = 500;
 const FRAME: u32 = 15;
 
@@ -77,6 +83,8 @@ const PRESS: Duration = Duration::from_millis(50);
 const RESIZE: Duration = Duration::from_millis(250);
 const FADE: Duration = Duration::from_millis(167);
 const PROGRESS: Duration = Duration::from_millis(500);
+const CARD_IN: Duration = Duration::from_millis(167);
+const CARD_OUT: Duration = Duration::from_millis(100);
 
 static QUEUE: Mutex<Vec<Message>> = Mutex::new(Vec::new());
 static CONTROLLER: AtomicIsize = AtomicIsize::new(0);
@@ -126,6 +134,7 @@ fn wide(value: &str) -> Vec<u16> {
 
 const CONTROLLER_CLASS: &str = "CodexMinibarTaskbarController";
 const WIDGET_CLASS: &str = "CodexMinibarTaskbarWidgets";
+const CARD_CLASS: &str = "CodexMinibarTaskbarCard";
 
 fn run() {
     unsafe {
@@ -143,6 +152,13 @@ fn run() {
             hInstance: instance,
             lpszClassName: widget_class.as_ptr(),
             hCursor: LoadCursorW(null_mut(), IDC_ARROW),
+            ..std::mem::zeroed()
+        });
+        let card_class = wide(CARD_CLASS);
+        RegisterClassW(&WNDCLASSW {
+            lpfnWndProc: Some(DefWindowProcW),
+            hInstance: instance,
+            lpszClassName: card_class.as_ptr(),
             ..std::mem::zeroed()
         });
         let controller = CreateWindowExW(
@@ -203,6 +219,11 @@ unsafe extern "system" fn controller_proc(
             with_host(Host::frame);
             0
         }
+        WM_TIMER if wparam == TIMER_CARD => {
+            unsafe { KillTimer(hwnd, TIMER_CARD) };
+            with_host(Host::open_card);
+            0
+        }
         _ => unsafe { DefWindowProcW(hwnd, message, wparam, lparam) },
     }
 }
@@ -255,6 +276,7 @@ unsafe extern "system" fn widget_proc(
             0
         }
         WM_RBUTTONUP => {
+            with_host(Host::close_card);
             let light = with_host(|host| host.appearance.light).unwrap_or(false);
             if let Some(action) = context_menu(hwnd, light) {
                 super::post_action(action);
@@ -421,6 +443,8 @@ struct Geometry {
     /// client pixels.
     anchor: i32,
     alignment: TaskbarAlignment,
+    /// Screen x of the taskbar's client origin.
+    origin: i32,
 }
 
 struct Surface {
@@ -471,7 +495,32 @@ impl Surface {
     }
 }
 
+/// The hover card: a topmost layered popup above the hovered widget.
+struct Card {
+    window: HWND,
+    surface: Option<Surface>,
+    id: String,
+    opacity: Tween,
+    /// Screen position and pixel size of the window.
+    rect: (i32, i32, i32, i32),
+    closing: bool,
+}
+
+impl Drop for Card {
+    fn drop(&mut self) {
+        self.surface = None;
+        unsafe { DestroyWindow(self.window) };
+    }
+}
+
 struct Host {
+    card: Option<Card>,
+    /// Explorer's buttons as last measured.
+    obstacles: Option<Obstacles>,
+    /// Left edge of a start-aligned strip, past the widgets button.
+    leading: i32,
+    /// Since when a first show waits for Explorer's buttons to be measured.
+    awaiting_obstacles: Option<Instant>,
     controller: HWND,
     window: HWND,
     config: Option<Config>,
@@ -495,6 +544,10 @@ struct Host {
 impl Host {
     fn new(controller: HWND) -> Self {
         Self {
+            card: None,
+            obstacles: None,
+            leading: 0,
+            awaiting_obstacles: None,
             controller,
             window: null_mut(),
             config: None,
@@ -540,6 +593,7 @@ impl Host {
                 .is_some_and(|config| config.colored_icons),
         );
         let minute = Utc::now().timestamp() / 60;
+        let obstacles = super::obstacles::latest();
         let window_lost = !self.window.is_null() && unsafe { IsWindow(self.window) } == 0;
         if window_lost {
             // Explorer restarted and destroyed the child with its taskbar.
@@ -550,7 +604,11 @@ impl Host {
         if geometry != self.geometry
             || appearance != self.appearance
             || minute != self.minute
+            || obstacles != self.obstacles
             || window_lost
+            || self
+                .awaiting_obstacles
+                .is_some_and(|since| since.elapsed() >= OBSTACLE_WAIT)
         {
             self.minute = minute;
             self.reconcile();
@@ -624,6 +682,20 @@ impl Host {
                 widths.push(renderer.measure(view, metrics, stamp).unwrap_or(0.0));
             }
         }
+        super::obstacles::set_wanted(!views.is_empty());
+        self.obstacles = super::obstacles::latest();
+        // A first show waits briefly for the measurement instead of flashing
+        // over Explorer's buttons.
+        if self.window.is_null() && self.obstacles.is_none() && !views.is_empty() {
+            let since = *self.awaiting_obstacles.get_or_insert_with(Instant::now);
+            if since.elapsed() < OBSTACLE_WAIT {
+                return;
+            }
+        }
+        self.awaiting_obstacles = None;
+        let (leading, available) = free_span(geometry, self.obstacles);
+        self.leading = leading;
+        let (views, widths) = fit(views, widths, available / metrics.scale);
 
         let mut previous = std::mem::take(&mut self.slots)
             .into_iter()
@@ -709,6 +781,10 @@ impl Host {
     }
 
     fn teardown(&mut self) {
+        super::obstacles::set_wanted(false);
+        self.obstacles = None;
+        self.card = None;
+        unsafe { KillTimer(self.controller, TIMER_CARD) };
         self.slots.clear();
         self.hits.clear();
         self.hover = None;
@@ -873,7 +949,7 @@ impl Host {
                 }
             }
             TaskbarAlignment::Start => {
-                let left = geometry.anchor + (START_MARGIN * metrics.scale).round() as i32;
+                let left = self.leading;
                 RECT {
                     left,
                     top: 0,
@@ -982,8 +1058,10 @@ impl Host {
             .into_iter()
             .map(|(id, x, width)| (id, x + shift, width))
             .collect();
+        self.render_card(now);
         let animating = self.slots.iter().any(|slot| slot.tweens().any(|tween| !tween.done(now)))
-            || self.slots.iter().any(|slot| slot.leaving);
+            || self.slots.iter().any(|slot| slot.leaving)
+            || self.card.as_ref().is_some_and(|card| !card.opacity.done(now) || card.closing);
         if animating {
             self.start_frames();
         } else {
@@ -1018,8 +1096,227 @@ impl Host {
             let duration = if target > 0.5 { HOVER_IN } else { HOVER_OUT };
             slot.hover.set(target, now, duration, animate);
         }
+        let reopen = id.is_some()
+            && self
+                .card
+                .as_ref()
+                .is_some_and(|card| !card.closing && Some(&card.id) != id.as_ref());
+        unsafe { KillTimer(self.controller, TIMER_CARD) };
+        if id.is_none() {
+            self.close_card();
+        } else if reopen {
+            // Moving between widgets swaps the card without the delay.
+            self.hover = id;
+            self.open_card();
+            return;
+        } else if self.card.as_ref().is_none_or(|card| card.closing) {
+            unsafe { SetTimer(self.controller, TIMER_CARD, CARD_DELAY, None) };
+        }
         self.hover = id;
         self.render();
+    }
+
+    fn open_card(&mut self) {
+        let Some(id) = self.hover.clone() else {
+            return;
+        };
+        if self.pressed.is_some() {
+            return;
+        }
+        let now = Instant::now();
+        let animate = self.animate();
+        match self.card.as_mut() {
+            Some(card) => {
+                card.id = id;
+                card.closing = false;
+                card.opacity.set(1.0, now, CARD_IN, animate);
+            }
+            None => {
+                let window = unsafe {
+                    let class = wide(CARD_CLASS);
+                    CreateWindowExW(
+                        WS_EX_LAYERED
+                            | WS_EX_TRANSPARENT
+                            | WS_EX_TOPMOST
+                            | WS_EX_TOOLWINDOW
+                            | WS_EX_NOACTIVATE,
+                        class.as_ptr(),
+                        null_mut(),
+                        WS_POPUP,
+                        0,
+                        0,
+                        1,
+                        1,
+                        null_mut(),
+                        null_mut(),
+                        GetModuleHandleW(null_mut()),
+                        null_mut(),
+                    )
+                };
+                if window.is_null() {
+                    return;
+                }
+                let mut opacity = Tween::at(0.0);
+                opacity.set(1.0, now, CARD_IN, animate);
+                self.card = Some(Card {
+                    window,
+                    surface: None,
+                    id,
+                    opacity,
+                    rect: (0, 0, 0, 0),
+                    closing: false,
+                });
+            }
+        }
+        self.render();
+    }
+
+    fn close_card(&mut self) {
+        unsafe { KillTimer(self.controller, TIMER_CARD) };
+        let now = Instant::now();
+        let animate = self.animate();
+        let Some(card) = self.card.as_mut() else {
+            return;
+        };
+        if !animate {
+            self.card = None;
+            return;
+        }
+        if !card.closing {
+            card.closing = true;
+            card.opacity.set(0.0, now, CARD_OUT, true);
+            self.start_frames();
+        }
+    }
+
+    /// Draws the hover card above its widget.
+    fn render_card(&mut self, now: Instant) {
+        let Some(geometry) = self.geometry else {
+            self.card = None;
+            return;
+        };
+        if self
+            .card
+            .as_ref()
+            .is_some_and(|card| card.closing && card.opacity.done(now))
+        {
+            self.card = None;
+        }
+        let Some(card) = self.card.as_ref() else {
+            return;
+        };
+        let Some(slot) = self
+            .slots
+            .iter()
+            .find(|slot| slot.view.id == card.id && !slot.leaving)
+        else {
+            self.card = None;
+            return;
+        };
+        let Some(&(_, hit_x, hit_width)) = self.hits.iter().find(|(id, _, _)| *id == card.id)
+        else {
+            return;
+        };
+        let Some(renderer) = self.renderer.as_mut() else {
+            return;
+        };
+        let scale = geometry.scale;
+        let stamp = Utc::now();
+        let Ok((width_dip, height_dip)) = renderer.card_size(&slot.view, scale, stamp) else {
+            return;
+        };
+        let width = (width_dip * scale).ceil() as i32;
+        let height = (height_dip * scale).ceil() as i32;
+        let mut strip = std::mem::MaybeUninit::<RECT>::zeroed();
+        unsafe { GetWindowRect(self.window, strip.as_mut_ptr()) };
+        let strip = unsafe { strip.assume_init() };
+        let monitor = monitor_bounds(geometry.taskbar);
+        let margin = (CARD_MARGIN * scale).round() as i32;
+        let gap = (CARD_GAP * scale).round() as i32;
+        let center = strip.left + ((hit_x + hit_width / 2.0) * scale).round() as i32;
+        let edge = (8.0 * scale).round() as i32;
+        let left = (center - width / 2)
+            .min(monitor.right - edge - width + margin)
+            .max(monitor.left + edge - margin);
+        // Above a bottom taskbar, below a top one.
+        let below = strip.top < (monitor.top + monitor.bottom) / 2;
+        let top = if below {
+            strip.bottom + gap - margin
+        } else {
+            strip.top - gap - height + margin
+        };
+        let opacity = card.opacity.value(now);
+        let rise = if below { -1.0 } else { 1.0 } * CARD_RISE * (1.0 - opacity);
+        let progress = slot
+            .progress
+            .iter()
+            .map(|tween| tween.map(|tween| tween.value(now)))
+            .collect::<Vec<_>>();
+        let view = slot.view.clone();
+        let appearance = self.appearance;
+        let Some(card) = self.card.as_mut() else {
+            return;
+        };
+        if card
+            .surface
+            .as_ref()
+            .is_none_or(|surface| surface.size != (width, height))
+        {
+            card.surface = Surface::new((width, height));
+        }
+        let Some(surface) = card.surface.as_ref() else {
+            return;
+        };
+        let Some(renderer) = self.renderer.as_mut() else {
+            return;
+        };
+        if renderer
+            .paint_card(
+                surface.dc,
+                (width, height),
+                scale,
+                appearance,
+                &view,
+                &progress,
+                opacity,
+                rise,
+                stamp,
+            )
+            .is_err()
+        {
+            return;
+        }
+        unsafe {
+            let screen = GetDC(null_mut());
+            let position = POINT { x: left, y: top };
+            let size = SIZE {
+                cx: width,
+                cy: height,
+            };
+            let source = POINT { x: 0, y: 0 };
+            let blend = BLENDFUNCTION {
+                BlendOp: AC_SRC_OVER as u8,
+                BlendFlags: 0,
+                SourceConstantAlpha: 255,
+                AlphaFormat: AC_SRC_ALPHA as u8,
+            };
+            UpdateLayeredWindow(
+                card.window,
+                screen,
+                &position,
+                &size,
+                surface.dc,
+                &source,
+                0,
+                &blend,
+                ULW_ALPHA,
+            );
+            ReleaseDC(null_mut(), screen);
+            if card.rect == (0, 0, 0, 0) {
+                ShowWindow(card.window, SW_SHOWNA);
+            }
+            card.rect = (left, top, width, height);
+        }
     }
 
     /// Returns whether leave tracking must be requested.
@@ -1052,6 +1349,7 @@ impl Host {
         let Some(id) = self.hit(x) else {
             return false;
         };
+        self.close_card();
         self.set_press(Some(&id));
         self.pressed = Some(id);
         true
@@ -1079,13 +1377,83 @@ impl Host {
     }
 }
 
+/// Longest a first show waits for Explorer's buttons to be measured.
+const OBSTACLE_WAIT: Duration = Duration::from_millis(1500);
+
+/// Clearance kept from Explorer's buttons, in DIPs.
+const OBSTACLE_GAP: f32 = 8.0;
+
+/// Left edge of a start-aligned strip and the width available to the strip,
+/// both in taskbar client pixels.
+fn free_span(geometry: Geometry, obstacles: Option<Obstacles>) -> (i32, f32) {
+    let scale = geometry.scale;
+    let gap = (OBSTACLE_GAP * scale).round() as i32;
+    let cluster = obstacles.and_then(|obstacles| obstacles.cluster);
+    let to_client = |x: i32| x - geometry.origin;
+    match geometry.alignment {
+        TaskbarAlignment::Tray => {
+            let right = geometry.anchor - (TRAY_MARGIN * scale).round() as i32;
+            let left = cluster
+                .map(|(_, right)| to_client(right) + gap)
+                .filter(|left| *left < right)
+                .unwrap_or(i32::MIN / 2);
+            (0, (right - left).max(0) as f32)
+        }
+        TaskbarAlignment::Start => {
+            let leading = obstacles
+                .and_then(|obstacles| obstacles.widgets_right)
+                .map(to_client)
+                .unwrap_or(geometry.anchor)
+                .max(geometry.anchor)
+                + (START_MARGIN * scale).round() as i32;
+            let right = cluster
+                .map(|(left, _)| to_client(left) - gap)
+                .unwrap_or(i32::MAX / 2);
+            (leading, (right - leading).max(0) as f32)
+        }
+    }
+}
+
+/// Keeps widgets in order while they fit `available` DIPs; the rest
+/// overflow, the way notification icons do.
+fn fit(views: Vec<WidgetView>, widths: Vec<f32>, available: f32) -> (Vec<WidgetView>, Vec<f32>) {
+    let mut used = 0.0;
+    views
+        .into_iter()
+        .zip(widths)
+        .enumerate()
+        .take_while(|(index, (_, width))| {
+            let next = used + width + if *index > 0 { WIDGET_GAP } else { 0.0 };
+            let fits = next <= available + 0.5;
+            if fits {
+                used = next;
+            }
+            fits
+        })
+        .map(|(_, pair)| pair)
+        .unzip()
+}
+
+/// Bounds of the monitor showing `window`.
+fn monitor_bounds(window: HWND) -> RECT {
+    use windows_sys::Win32::Graphics::Gdi::{
+        GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
+    };
+    unsafe {
+        let mut info: MONITORINFO = std::mem::zeroed();
+        info.cbSize = size_of::<MONITORINFO>() as u32;
+        GetMonitorInfoW(MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST), &mut info);
+        info.rcMonitor
+    }
+}
+
 fn key(rect: RECT) -> (i32, i32, i32, i32) {
     (rect.left, rect.top, rect.right, rect.bottom)
 }
 
 fn current_appearance(colored_icons: bool) -> Appearance {
     Appearance {
-        light: crate::tray::system_uses_light_theme(),
+        light: crate::taskbar::uses_light_theme(),
         colored_icons,
         accent: crate::theme::current_accent_rgb(),
     }
@@ -1139,12 +1507,15 @@ fn locate(alignment: TaskbarAlignment) -> Option<Geometry> {
             }
             TaskbarAlignment::Start => 0,
         };
+        let mut origin = POINT { x: 0, y: 0 };
+        MapWindowPoints(taskbar, null_mut(), &mut origin, 1);
         Some(Geometry {
             taskbar,
             scale,
             height,
             anchor,
             alignment,
+            origin: origin.x,
         })
     }
 }

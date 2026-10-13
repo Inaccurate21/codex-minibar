@@ -261,6 +261,7 @@ impl SettingsWindow {
         self.settings.language.apply();
         cx.refresh_windows();
         self.settings.normalize_tray_widgets();
+        self.settings.taskbar.normalize();
         self.settings.normalize_popup_visibility();
         persistence::queue(self.state.settings_tx.clone(), move |settings| {
             edit(settings)

@@ -11,6 +11,8 @@ pub(crate) mod model;
 #[cfg(windows)]
 mod host;
 #[cfg(windows)]
+mod obstacles;
+#[cfg(windows)]
 pub(crate) mod render;
 
 use std::sync::{
@@ -105,6 +107,39 @@ pub fn publish_settings(settings: &Settings) {
     let _ = settings;
 }
 
+/// Whether the taskbar uses the light theme. The taskbar follows the
+/// "Windows mode" (`SystemUsesLightTheme`), not the app mode the popup uses.
+#[cfg(windows)]
+pub(crate) fn uses_light_theme() -> bool {
+    use windows_sys::Win32::{
+        Foundation::ERROR_SUCCESS,
+        System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW},
+    };
+    let wide = |value: &str| value.encode_utf16().chain(Some(0)).collect::<Vec<_>>();
+    let subkey = wide(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+    let name = wide("SystemUsesLightTheme");
+    // Windows 10 and 11 default to a dark taskbar when the value is missing.
+    let mut value = 0u32;
+    let mut size = size_of::<u32>() as u32;
+    let status = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            subkey.as_ptr(),
+            name.as_ptr(),
+            RRF_RT_REG_DWORD,
+            std::ptr::null_mut(),
+            (&mut value as *mut u32).cast(),
+            &mut size,
+        )
+    };
+    status == ERROR_SUCCESS && value != 0
+}
+
+#[cfg(not(windows))]
+pub(crate) fn uses_light_theme() -> bool {
+    false
+}
+
 /// A widget strip rendered for Settings, exactly as the taskbar draws it.
 pub(crate) struct Preview {
     pub(crate) png: Vec<u8>,
@@ -176,4 +211,60 @@ pub fn publish_limits(limits: &ProviderLimits) {
     host::publish(host::Message::Limits(limits.clone()));
     #[cfg(not(windows))]
     let _ = limits;
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+    use crate::{
+        limits::{LimitWindow, RateLimits},
+        settings::{ProviderKind, TaskbarWidget, TaskbarWidgetStyle},
+    };
+
+    fn sample() -> (Vec<TaskbarWidget>, ProviderLimits) {
+        let codex = ProviderId::primary(ProviderKind::Codex);
+        let window = |used| LimitWindow {
+            used_percent: Some(used),
+            resets_at: Some(chrono::Utc::now() + chrono::Duration::minutes(133)),
+            duration_minutes: Some(300),
+        };
+        let limits = ProviderLimits::from_entries([(
+            codex,
+            RateLimits {
+                primary: window(58),
+                secondary: window(5),
+                ..RateLimits::default()
+            },
+        )]);
+        let widgets = TaskbarWidgetStyle::ALL
+            .into_iter()
+            .map(|style| TaskbarWidget {
+                style,
+                ..TaskbarWidget::for_provider(codex)
+            })
+            .collect();
+        (widgets, limits)
+    }
+
+    #[test]
+    fn previews_render_every_style_at_common_scales() {
+        let (widgets, limits) = sample();
+        for light in [false, true] {
+            for scale in [1.0, 1.25, 1.5, 2.0] {
+                let appearance = model::Appearance {
+                    light,
+                    colored_icons: true,
+                    accent: [0, 120, 212],
+                };
+                let preview = preview(&widgets, &limits, appearance, scale, 48.0)
+                    .expect("the strip renders");
+                assert!(preview.width > 200.0);
+                assert!((preview.height - 48.0).abs() < 1.0);
+                if let Ok(dir) = std::env::var("TASKBAR_PREVIEW_DIR") {
+                    let name = format!("strip-{}-{scale}.png", if light { "light" } else { "dark" });
+                    std::fs::write(std::path::Path::new(&dir).join(name), &preview.png).unwrap();
+                }
+            }
+        }
+    }
 }

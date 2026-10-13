@@ -87,7 +87,7 @@ impl SettingsWindow {
         widgets: &[TaskbarWidget],
         window: &Window,
     ) -> Option<AnyElement> {
-        let light = crate::tray::system_uses_light_theme();
+        let light = crate::taskbar::uses_light_theme();
         let scale = window.scale_factor();
         let cache_key = PreviewKey {
             widgets: widgets.to_vec(),
@@ -132,7 +132,7 @@ impl SettingsWindow {
 
     /// A widget on a slice of taskbar, as tall as the real one.
     fn taskbar_tile(&mut self, key: String, widgets: &[TaskbarWidget], window: &Window) -> AnyElement {
-        let light = crate::tray::system_uses_light_theme();
+        let light = crate::taskbar::uses_light_theme();
         div()
             .h(px(TASKBAR_HEIGHT))
             .flex_none()
@@ -149,7 +149,7 @@ impl SettingsWindow {
 
     /// The whole strip beside a mock notification area and clock.
     fn taskbar_mock(&mut self, k: &Kit, widgets: &[TaskbarWidget], window: &Window) -> AnyElement {
-        let light = crate::tray::system_uses_light_theme();
+        let light = crate::taskbar::uses_light_theme();
         let text = if light {
             rgb8((0x1A, 0x1A, 0x1A))
         } else {
@@ -246,21 +246,21 @@ impl SettingsWindow {
                     Some(crate::i18n::tr("taskbar-show-widgets-description").into()),
                     taskbar.enabled,
                     Self::h(cx, |this, value: bool, _, cx| {
+                        // Turning widgets on for the first time shows one. It
+                        // is built once: `edit` runs for the snapshot and the
+                        // writer, and both must see the same widget id.
                         let seed = this
                             .enabled_taskbar_providers()
                             .first()
                             .copied()
-                            .filter(|_| value && this.settings.taskbar.widgets.is_empty());
+                            .filter(|_| value && this.settings.taskbar.widgets.is_empty())
+                            .map(TaskbarWidget::for_provider);
                         this.edit(cx, move |settings| {
                             settings.taskbar.enabled = value;
-                            // Turning widgets on for the first time shows one.
-                            if let Some(provider) = seed
+                            if let Some(widget) = seed.clone()
                                 && settings.taskbar.widgets.is_empty()
                             {
-                                settings
-                                    .taskbar
-                                    .widgets
-                                    .push(TaskbarWidget::for_provider(provider));
+                                settings.taskbar.widgets.push(widget);
                             }
                         })
                     }),
