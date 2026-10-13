@@ -118,7 +118,6 @@ enum Weight {
 enum Tone {
     Primary,
     Secondary,
-    Tertiary,
     Tint(Rgb),
 }
 
@@ -1390,10 +1389,6 @@ impl Renderer {
         match tone {
             Tone::Primary => (appearance.text(), appearance.text_alpha()),
             Tone::Secondary => (appearance.text(), appearance.secondary_alpha()),
-            Tone::Tertiary => (
-                appearance.text(),
-                if appearance.light { 0.447 } else { 0.545 },
-            ),
             Tone::Tint(rgb) => (rgb, 1.0),
         }
     }
@@ -1778,22 +1773,7 @@ impl Renderer {
                 y += height;
             }
         }
-        y += 12.0;
-        prims.push(Prim::Rule {
-            x: 0.0,
-            y,
-            width: CARD_WIDTH,
-        });
-        y += 9.0;
-        let hint = self.line(crate::i18n::tr("taskbar-card-hint"), 11.0, Weight::Regular)?;
-        let height = hint.height;
-        prims.push(Prim::Text {
-            layout: hint.layout,
-            x: CARD_PAD,
-            y,
-            tone: Tone::Tertiary,
-        });
-        y += height + 10.0;
+        y += CARD_PAD;
         Ok((y, prims))
     }
 

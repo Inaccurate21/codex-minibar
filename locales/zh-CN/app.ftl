@@ -1808,7 +1808,6 @@ taskbar-card-left = 剩余 { $value }
 taskbar-card-used = 已用 { $value }
 taskbar-card-resets = { $time } 后重置 · { $clock }
 taskbar-card-no-data = 正在等待数据
-taskbar-card-hint = 单击打开 · 右键单击查看选项
 short-5h = 5小时
 short-7d = 7天
 taskbar-style-nested = 嵌套圆环

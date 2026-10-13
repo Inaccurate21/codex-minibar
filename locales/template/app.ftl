@@ -3946,9 +3946,6 @@ taskbar-card-resets = { "" }
 # taskbar-card-no-data = Waiting for data
 taskbar-card-no-data = { "" }
 
-# English source:
-# taskbar-card-hint = Click to open · Right-click for options
-taskbar-card-hint = { "" }
 
 # English source:
 # short-5h = 5h

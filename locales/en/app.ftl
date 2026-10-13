@@ -2718,7 +2718,6 @@ taskbar-card-left = { $value } left
 taskbar-card-used = { $value } used
 taskbar-card-resets = Resets in { $time } · { $clock }
 taskbar-card-no-data = Waiting for data
-taskbar-card-hint = Click to open · Right-click for options
 short-5h = 5h
 short-7d = 7d
 taskbar-style-nested = Nested rings

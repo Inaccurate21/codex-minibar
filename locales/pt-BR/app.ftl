@@ -1829,7 +1829,6 @@ taskbar-card-left = Restam { $value }
 taskbar-card-used = { $value } usado
 taskbar-card-resets = Redefine em { $time } · { $clock }
 taskbar-card-no-data = Aguardando dados
-taskbar-card-hint = Clique para abrir · Clique com o botão direito para opções
 short-5h = 5 h
 short-7d = 7 d
 taskbar-style-nested = Anéis aninhados

@@ -1829,7 +1829,6 @@ taskbar-card-left = Quedan { $value }
 taskbar-card-used = { $value } usado
 taskbar-card-resets = Se restablece en { $time } · { $clock }
 taskbar-card-no-data = Esperando datos
-taskbar-card-hint = Clic para abrir · Clic derecho para opciones
 short-5h = 5 h
 short-7d = 7 d
 taskbar-style-nested = Anillos anidados

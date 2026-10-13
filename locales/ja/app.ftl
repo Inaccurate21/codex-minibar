@@ -2698,7 +2698,6 @@ taskbar-card-left = 残り { $value }
 taskbar-card-used = { $value } 使用済み
 taskbar-card-resets = { $time } 後にリセット · { $clock }
 taskbar-card-no-data = データを待機中
-taskbar-card-hint = クリックで開く · 右クリックでオプション
 short-5h = 5時間
 short-7d = 7日
 taskbar-style-nested = 入れ子のリング

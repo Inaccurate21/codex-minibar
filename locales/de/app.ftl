@@ -2719,7 +2719,6 @@ taskbar-card-left = Noch { $value }
 taskbar-card-used = { $value } verbraucht
 taskbar-card-resets = Reset in { $time } · { $clock }
 taskbar-card-no-data = Warten auf Daten
-taskbar-card-hint = Klicken zum Öffnen · Rechtsklick für Optionen
 short-5h = 5 Std.
 short-7d = 7 T.
 taskbar-style-nested = Verschachtelte Ringe

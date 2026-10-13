@@ -2725,7 +2725,6 @@ taskbar-card-left = Осталось { $value }
 taskbar-card-used = Использовано { $value }
 taskbar-card-resets = Сброс через { $time } · { $clock }
 taskbar-card-no-data = Ожидание данных
-taskbar-card-hint = Щелчок — открыть · Правая кнопка — параметры
 short-5h = 5ч
 short-7d = 7д
 taskbar-style-nested = Вложенные кольца
