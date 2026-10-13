@@ -49,7 +49,8 @@ const SHADOW_REACH: f32 = SHADOW_BLUR * 2.0;
 /// Room around the cards for their shadow.
 const EDGE: f32 = SHADOW_REACH + SHADOW_OFFSET;
 const GAP: f32 = 8.0;
-const HOST_HEIGHT: f32 = 620.0;
+/// Tall enough for a release summary with its hero image and button.
+const HOST_HEIGHT: f32 = 900.0;
 const MAX_CARDS: usize = 4;
 /// Inner padding, as on popup pages.
 const PADDING: f32 = 12.0;
@@ -85,6 +86,8 @@ const SWEEP: Duration = Duration::from_millis(1600);
 const SWEEP_WIDTH: f32 = 0.35;
 /// A taller release summary scrolls inside the card.
 const SUMMARY_MAX_HEIGHT: f32 = 360.0;
+/// The scrolling summary never shrinks below this on a short screen.
+const MIN_SUMMARY_HEIGHT: f32 = 80.0;
 /// Release summaries use the card's full inner width.
 const SUMMARY_WIDTH: f32 = CARD_WIDTH - BORDER * 2.0 - PADDING * 2.0 - INSET;
 /// A summary's first image spans the top of the card, edge to edge.
@@ -356,6 +359,15 @@ impl ToastHost {
         }
         if !notification.actions.is_empty() {
             height += SECTION_GAP + BUTTON_HEIGHT;
+        }
+        // The host is bottom-anchored and may be shorter than HOST_HEIGHT on
+        // a small work area: shrink the scrolling summary so the card never
+        // grows past the top edge, where it would be cropped.
+        let room = HOST_HEIGHT.min(f32::from(window.viewport_size().height)) - EDGE * 2.0;
+        if summary_height > 0.0 && height > room {
+            let shrunk = (summary_height - (height - room)).max(MIN_SUMMARY_HEIGHT);
+            height -= summary_height - shrunk;
+            summary_height = shrunk;
         }
         if notification.progress.is_some() {
             height += PROGRESS_GAP + components::PROGRESS_TRACK_HEIGHT;
