@@ -33,6 +33,8 @@ use crate::{
 /// Fluent motion tokens used by Windows edge panels.
 const OPEN_ANIMATION: Duration = Duration::from_millis(250);
 const CLOSE_ANIMATION: Duration = Duration::from_millis(167);
+/// How long a reset redemption result stays on its card.
+pub(super) const RESET_STATUS_TTL: Duration = Duration::from_secs(8);
 /// Longest frame the open slide advances through; slower frames are hitches.
 const SLIDE_MAX_FRAME_STEP: Duration = Duration::from_millis(34);
 /// Invisible frames rendered at launch before the popup host is parked.
@@ -273,7 +275,9 @@ pub(crate) struct PopupRoot {
     pub(super) open_reset_card: Option<String>,
     pub(super) reset_confirm: Option<ProviderId>,
     pub(super) reset_busy: HashSet<ProviderId>,
-    pub(super) reset_status: HashMap<ProviderId, crate::banked_reset::Status>,
+    /// Latest redemption result per provider and when it arrived; it fades
+    /// out after `RESET_STATUS_TTL` and is dropped when the popup hides.
+    pub(super) reset_status: HashMap<ProviderId, (crate::banked_reset::Status, Instant)>,
     /// OpenRouter key administration on the OpenRouter tab.
     pub(super) keys: super::keys::KeyAdmin,
     /// Settings-window controls (dropdowns) reused by popup forms.
@@ -914,6 +918,7 @@ impl PopupRoot {
         self.host.offset = 0.0;
         self.keys.on_hidden();
         self.reset_confirm = None;
+        self.reset_status.clear();
         self.kit.menus.close_silently();
         self.hover.clear();
         self.tip = None;
@@ -1376,7 +1381,13 @@ impl PopupRoot {
                         Ok((outcome, _)) => crate::banked_reset::Status::Outcome(outcome),
                         Err(error) => crate::banked_reset::Status::from_error(error),
                     };
-                    this.reset_status.insert(provider, message);
+                    this.reset_status
+                        .insert(provider, (message, Instant::now()));
+                    cx.spawn(async move |this, cx| {
+                        cx.background_executor().timer(RESET_STATUS_TTL).await;
+                        let _ = this.update(cx, |_, cx| cx.notify());
+                    })
+                    .detach();
                     // Include sibling instances sharing the account. Normal
                     // worker publication updates tray, Home and provider tabs.
                     this.refresh(cx);

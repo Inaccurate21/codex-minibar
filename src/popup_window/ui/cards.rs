@@ -1590,6 +1590,7 @@ impl PopupRoot {
                     .opacity(confirm_reveal)
                     .child(
                         div()
+                            .w(px(available_width + pad_x * 2.0))
                             .px(px(pad_x))
                             .pb(px(9.0))
                             .flex()
@@ -1601,16 +1602,18 @@ impl PopupRoot {
                     ),
             );
         }
-        let status = self
-            .reset_status
-            .get(&provider)
-            .map(crate::banked_reset::Status::message);
+        let status = self.reset_status.get(&provider).map(|(status, at)| {
+            (
+                status.message(),
+                at.elapsed() < super::root::RESET_STATUS_TTL,
+            )
+        });
         let status_reveal = self.fx.toggle(
             fx::key(("reset-status", expansion_key)),
-            status.is_some() && !busy,
+            status.as_ref().is_some_and(|(_, fresh)| *fresh) && !busy,
             fx::NORMAL,
         );
-        if let Some(status) = status {
+        if let Some((status, _)) = status.filter(|_| status_reveal > 0.001) {
             let height = (metrics.body(&status) / available_width.max(1.0)).ceil() * 24.0 + 64.0;
             element = element.child(
                 div()
@@ -1618,7 +1621,10 @@ impl PopupRoot {
                     .max_h(px(height * status_reveal))
                     .opacity(status_reveal)
                     .child(
+                        // A definite width: unbounded text would inflate the
+                        // section's max-content width and squeeze its heading.
                         div()
+                            .w(px(available_width + pad_x * 2.0))
                             .px(px(pad_x))
                             .pb(px(9.0))
                             .flex()
