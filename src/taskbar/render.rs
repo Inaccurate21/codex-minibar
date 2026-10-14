@@ -1446,6 +1446,52 @@ impl Renderer {
                         );
                     }
                 }
+                if let Some(badge) = &icon.badge {
+                    // Keep the plate inside the icon bounds so every layout,
+                    // including rings and vertical taskbars, reserves enough room.
+                    let height = (size * 0.46).clamp(9.0, 14.0);
+                    if let Ok(line) = self.line(&badge.text, height * 0.68, Weight::Semibold) {
+                        let width = (line.width + 4.0).max(height);
+                        let left = x + size - width;
+                        let top = y + size - height;
+                        let (background, foreground) = badge
+                            .color
+                            .rgb()
+                            .zip(badge.color.text_rgb())
+                            .map(|(background, foreground)| {
+                                (Rgb::from(background), Rgb::from(foreground))
+                            })
+                            .unwrap_or((
+                                appearance.text(),
+                                if appearance.light {
+                                    [255, 255, 255]
+                                } else {
+                                    [0, 0, 0]
+                                },
+                            ));
+                        self.fill(
+                            &D2D1_ROUNDED_RECT {
+                                rect: rect(left, top, left + width, top + height),
+                                radiusX: height * 0.3,
+                                radiusY: height * 0.3,
+                            },
+                            background,
+                            opacity,
+                        );
+                        unsafe {
+                            self.brush.SetColor(&color(foreground, opacity));
+                            self.target.DrawTextLayout(
+                                Vector2 {
+                                    x: metrics.snap(left + (width - line.width) / 2.0),
+                                    y: metrics.snap(top + (height - line.height) / 2.0),
+                                },
+                                &line.layout,
+                                &self.brush,
+                                D2D1_DRAW_TEXT_OPTIONS_NONE,
+                            );
+                        }
+                    }
+                }
             }
             Prim::Rule { x, y, width } => unsafe {
                 let one = 1.0 / metrics.scale;

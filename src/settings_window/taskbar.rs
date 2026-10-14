@@ -112,6 +112,7 @@ fn widget_options(widget: &TaskbarWidget) -> Vec<WidgetOption> {
 #[derive(Clone, PartialEq)]
 pub(crate) struct PreviewKey {
     widgets: Vec<TaskbarWidget>,
+    badges: Vec<Option<crate::instances::Badge>>,
     light: bool,
     colored: bool,
     accent: [u8; 3],
@@ -181,6 +182,12 @@ impl SettingsWindow {
         let scale = window.scale_factor();
         let cache_key = PreviewKey {
             widgets: widgets.to_vec(),
+            badges: widgets
+                .iter()
+                .flat_map(|widget| widget.indicators.iter())
+                .filter_map(TrayIndicator::provider)
+                .map(|provider| provider.badge())
+                .collect(),
             light,
             colored: self.settings.use_colored_provider_icons,
             accent: crate::theme::current_accent_rgb(),

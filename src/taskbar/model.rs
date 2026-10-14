@@ -71,6 +71,7 @@ impl Appearance {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Icon {
     pub(crate) name: &'static str,
+    pub(crate) badge: Option<crate::instances::Badge>,
     pub(crate) tint: Rgb,
 }
 
@@ -238,6 +239,7 @@ fn icon_for(provider: ProviderId, appearance: Appearance) -> Icon {
     let descriptor = crate::provider_registry::descriptor(provider.kind());
     Icon {
         name: descriptor.icon,
+        badge: provider.badge(),
         tint: if appearance.colored_icons {
             appearance.provider_tint(provider)
         } else {
