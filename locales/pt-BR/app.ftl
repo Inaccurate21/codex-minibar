@@ -1917,3 +1917,69 @@ game-mode-off-title = Modo jogo desligado
 
 # src/notifications.rs
 game-mode-off-body = Verificações e notificações normais retomadas
+
+# src/settings_window/command_palette.rs
+command-palette = Command Palette
+
+# src/settings_window/command_palette.rs
+stream-deck = Stream Deck
+
+# src/settings_window/command_palette.rs
+install = Instalar
+
+# src/settings_window/command_palette.rs
+cmdpal-extension = Extensão da Command Palette
+
+# src/settings_window/command_palette.rs
+cmdpal-description = Adiciona o Minibar à Command Palette do PowerToys: digite um provedor para ver os limites ou fixe faixas no Dock. A instalação pede aprovação de administrador.
+
+# src/settings_window/command_palette.rs
+cmdpal-installed-hint = Instalada. Digite “minibar” ou o nome de um provedor na Command Palette, ou fixe faixas em Editar Dock.
+
+# src/settings_window/command_palette.rs
+cmdpal-downloading = Baixando a extensão…
+
+# src/settings_window/command_palette.rs
+cmdpal-installing = Aguardando o instalador. Aprove a solicitação de administrador para continuar.
+
+# src/settings_window/command_palette.rs
+cmdpal-installing-short = Instalando…
+
+# src/settings_window/command_palette.rs
+cmdpal-removing = Removendo a extensão…
+
+# src/settings_window/command_palette.rs
+cmdpal-failed = Não foi possível instalar ou remover a extensão.
+
+# src/settings_window/command_palette.rs
+cmdpal-reinstall = Reinstalar
+
+# src/settings_window/command_palette.rs
+cmdpal-dock-bands = Faixas do Dock
+
+# src/settings_window/command_palette.rs
+cmdpal-dock-bands-caption = Cada faixa aparece nas configurações do Dock da Command Palette. Fixe-a em Editar Dock e escolha onde ela fica.
+
+# src/settings_window/command_palette.rs
+cmdpal-no-bands = Nenhuma faixa
+
+# src/settings_window/command_palette.rs
+cmdpal-no-bands-description = Adicione uma faixa para fixar os limites de um provedor no Dock.
+
+# src/settings_window/command_palette.rs
+cmdpal-add-band = Adicionar faixa
+
+# src/settings_window/command_palette.rs
+cmdpal-band = Faixa { $v0 }
+
+# src/settings_window/command_palette.rs
+cmdpal-band-removed = Faixa removida
+
+# src/settings_window/command_palette.rs
+cmdpal-remove-band = Remover faixa
+
+# src/settings_window/command_palette.rs
+cmdpal-content-hint = O Dock mostra uma faixa como um título acima de um subtítulo.
+
+# src/settings_window/command_palette.rs
+cmdpal-indicators-hint = Até 2 cotas: uma preenche o título e o subtítulo; duas ocupam uma linha cada.

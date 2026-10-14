@@ -4146,3 +4146,91 @@ game-mode-off-title = { "" }
 # English source:
 # game-mode-off-body = Back to normal checks and notifications
 game-mode-off-body = { "" }
+
+# English source:
+# command-palette = Command Palette
+command-palette = { "" }
+
+# English source:
+# stream-deck = Stream Deck
+stream-deck = { "" }
+
+# English source:
+# install = Install
+install = { "" }
+
+# English source:
+# cmdpal-extension = Command Palette extension
+cmdpal-extension = { "" }
+
+# English source:
+# cmdpal-description = Adds Minibar to PowerToys Command Palette: type a provider to see its limits, or pin bands to the Dock. Installing asks for administrator approval.
+cmdpal-description = { "" }
+
+# English source:
+# cmdpal-installed-hint = Installed. Type “minibar” or a provider name in Command Palette, or pin bands from Edit Dock.
+cmdpal-installed-hint = { "" }
+
+# English source:
+# cmdpal-downloading = Downloading the extension…
+cmdpal-downloading = { "" }
+
+# English source:
+# cmdpal-installing = Waiting for the installer. Approve the administrator prompt to continue.
+cmdpal-installing = { "" }
+
+# English source:
+# cmdpal-installing-short = Installing…
+cmdpal-installing-short = { "" }
+
+# English source:
+# cmdpal-removing = Removing the extension…
+cmdpal-removing = { "" }
+
+# English source:
+# cmdpal-failed = The extension could not be installed or removed.
+cmdpal-failed = { "" }
+
+# English source:
+# cmdpal-reinstall = Reinstall
+cmdpal-reinstall = { "" }
+
+# English source:
+# cmdpal-dock-bands = Dock bands
+cmdpal-dock-bands = { "" }
+
+# English source:
+# cmdpal-dock-bands-caption = Each band appears in the Command Palette Dock settings. Pin it from Edit Dock, then choose where it sits.
+cmdpal-dock-bands-caption = { "" }
+
+# English source:
+# cmdpal-no-bands = No bands
+cmdpal-no-bands = { "" }
+
+# English source:
+# cmdpal-no-bands-description = Add a band to pin provider limits to the Dock.
+cmdpal-no-bands-description = { "" }
+
+# English source:
+# cmdpal-add-band = Add band
+cmdpal-add-band = { "" }
+
+# English source:
+# cmdpal-band = Band { $v0 }
+cmdpal-band = { "" }
+
+# English source:
+# cmdpal-band-removed = Band removed
+cmdpal-band-removed = { "" }
+
+# English source:
+# cmdpal-remove-band = Remove band
+cmdpal-remove-band = { "" }
+
+# English source:
+# cmdpal-content-hint = The Dock writes a band as a title over a subtitle.
+cmdpal-content-hint = { "" }
+
+# English source:
+# cmdpal-indicators-hint = Up to 2 quotas: one fills the title and subtitle, two take a line each.
+cmdpal-indicators-hint = { "" }

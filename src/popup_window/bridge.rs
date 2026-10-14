@@ -282,6 +282,7 @@ pub(super) fn start_background_bridge(state: Arc<AppState>) {
         crate::taskbar::register_bridge_thread();
         crate::taskbar::publish_limits(&state.current_limits());
         crate::taskbar::publish_settings(&state.settings);
+        crate::cmdpal::publish_settings(&state.settings);
 
         // First frame: the renderer seeds itself from settings, then takes
         // this complete snapshot (errors, activation text, update state).
@@ -376,6 +377,7 @@ pub(super) fn start_background_bridge(state: Arc<AppState>) {
             }
             crate::taskbar::publish_limits(&state.current_limits());
             crate::taskbar::publish_settings(&settings);
+            crate::cmdpal::publish_settings(&settings);
             for (provider, commands) in state.worker_commands() {
                 let _ = commands.send(WorkerCommand::SetAutomaticActivation(
                     crate::provider::automatic_activation(provider, &settings),
@@ -516,6 +518,9 @@ pub(super) fn start_background_bridge(state: Arc<AppState>) {
                             None => crate::popup_window::request_home_view(),
                         }
                         popup::show_on_primary();
+                    }
+                    crate::streamdeck::Command::OpenCommandPaletteSettings => {
+                        crate::settings_window::open_command_palette();
                     }
                 }
             }

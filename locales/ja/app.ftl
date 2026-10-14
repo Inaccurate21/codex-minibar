@@ -2786,3 +2786,69 @@ game-mode-off-title = ゲームモード オフ
 
 # src/notifications.rs
 game-mode-off-body = 通常の確認と通知に戻りました
+
+# src/settings_window/command_palette.rs
+command-palette = Command Palette
+
+# src/settings_window/command_palette.rs
+stream-deck = Stream Deck
+
+# src/settings_window/command_palette.rs
+install = インストール
+
+# src/settings_window/command_palette.rs
+cmdpal-extension = Command Palette 拡張機能
+
+# src/settings_window/command_palette.rs
+cmdpal-description = PowerToys Command Palette に Minibar を追加します。プロバイダー名を入力すると上限を確認でき、バンドを Dock にピン留めできます。インストールには管理者の承認が必要です。
+
+# src/settings_window/command_palette.rs
+cmdpal-installed-hint = インストール済み。Command Palette で「minibar」またはプロバイダー名を入力するか、「Dock を編集」からバンドをピン留めしてください。
+
+# src/settings_window/command_palette.rs
+cmdpal-downloading = 拡張機能をダウンロードしています…
+
+# src/settings_window/command_palette.rs
+cmdpal-installing = インストーラーを待っています。続行するには管理者の確認を承認してください。
+
+# src/settings_window/command_palette.rs
+cmdpal-installing-short = インストール中…
+
+# src/settings_window/command_palette.rs
+cmdpal-removing = 拡張機能を削除しています…
+
+# src/settings_window/command_palette.rs
+cmdpal-failed = 拡張機能をインストールまたは削除できませんでした。
+
+# src/settings_window/command_palette.rs
+cmdpal-reinstall = 再インストール
+
+# src/settings_window/command_palette.rs
+cmdpal-dock-bands = Dock バンド
+
+# src/settings_window/command_palette.rs
+cmdpal-dock-bands-caption = 各バンドは Command Palette の Dock 設定に表示されます。「Dock を編集」からピン留めし、配置を選んでください。
+
+# src/settings_window/command_palette.rs
+cmdpal-no-bands = バンドがありません
+
+# src/settings_window/command_palette.rs
+cmdpal-no-bands-description = バンドを追加して、プロバイダーの上限を Dock にピン留めします。
+
+# src/settings_window/command_palette.rs
+cmdpal-add-band = バンドを追加
+
+# src/settings_window/command_palette.rs
+cmdpal-band = バンド { $v0 }
+
+# src/settings_window/command_palette.rs
+cmdpal-band-removed = バンドを削除しました
+
+# src/settings_window/command_palette.rs
+cmdpal-remove-band = バンドを削除
+
+# src/settings_window/command_palette.rs
+cmdpal-content-hint = Dock はバンドをタイトルとサブタイトルの 2 行で表示します。
+
+# src/settings_window/command_palette.rs
+cmdpal-indicators-hint = 最大 2 つのクォータ：1 つならタイトルとサブタイトルを使い、2 つなら 1 行ずつ表示します。

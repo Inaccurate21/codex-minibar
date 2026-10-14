@@ -49,6 +49,8 @@ const MAX_INDICATORS: usize = 3;
 pub(crate) enum IndicatorOwner {
     Tray,
     Taskbar,
+    /// Command Palette Dock bands.
+    Dock,
 }
 
 impl IndicatorOwner {
@@ -56,6 +58,7 @@ impl IndicatorOwner {
         match self {
             Self::Tray => "tray",
             Self::Taskbar => "taskbar",
+            Self::Dock => "dock",
         }
     }
 }
@@ -301,6 +304,16 @@ pub(super) fn preview_limits() -> crate::limits::ProviderLimits {
                         window: window(1),
                     },
                 ],
+                ..Default::default()
+            },
+        ),
+        (
+            ProviderKind::OpenRouter,
+            crate::limits::RateLimits {
+                spending: Some(crate::limits::SpendingSummary {
+                    balance_microusd: Some(24_600_000),
+                    ..Default::default()
+                }),
                 ..Default::default()
             },
         ),
@@ -601,6 +614,7 @@ impl SettingsWindow {
         let dialog = match owner {
             IndicatorOwner::Tray => self.tray_dialog.as_mut(),
             IndicatorOwner::Taskbar => self.taskbar_dialog.as_mut(),
+            IndicatorOwner::Dock => self.dock_dialog.as_mut(),
         };
         if let Some(dialog) = dialog {
             f(dialog);
@@ -623,6 +637,11 @@ impl SettingsWindow {
                 }
             }),
             IndicatorOwner::Taskbar => self.update_taskbar_widgets(cx, |widgets| {
+                if let Some(widget) = widgets.get_mut(widget_index) {
+                    f(&mut widget.indicators);
+                }
+            }),
+            IndicatorOwner::Dock => self.update_dock_widgets(cx, |widgets| {
                 if let Some(widget) = widgets.get_mut(widget_index) {
                     f(&mut widget.indicators);
                 }
@@ -1211,9 +1230,13 @@ impl SettingsWindow {
             );
             second = second.child(kit::field(k, crate::i18n::tr("show"), value_box));
         }
-        second = second.child(kit::field(k, crate::i18n::tr("color"), color_box));
+        // The Dock draws band text in its own color.
+        let colored = owner != IndicatorOwner::Dock;
+        if colored {
+            second = second.child(kit::field(k, crate::i18n::tr("color"), color_box));
+        }
         grid = grid.child(second);
-        if indicator.color_mode == TrayColorMode::Fixed {
+        if colored && indicator.color_mode == TrayColorMode::Fixed {
             grid = grid.child(self.color_picker(
                 k,
                 owner,

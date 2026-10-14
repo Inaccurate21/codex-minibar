@@ -2806,3 +2806,69 @@ game-mode-off-title = Game mode off
 
 # src/notifications.rs
 game-mode-off-body = Back to normal checks and notifications
+
+# src/settings_window/command_palette.rs
+command-palette = Command Palette
+
+# src/settings_window/command_palette.rs
+stream-deck = Stream Deck
+
+# src/settings_window/command_palette.rs
+install = Install
+
+# src/settings_window/command_palette.rs
+cmdpal-extension = Command Palette extension
+
+# src/settings_window/command_palette.rs
+cmdpal-description = Adds Minibar to PowerToys Command Palette: type a provider to see its limits, or pin bands to the Dock. Installing asks for administrator approval.
+
+# src/settings_window/command_palette.rs
+cmdpal-installed-hint = Installed. Type “minibar” or a provider name in Command Palette, or pin bands from Edit Dock.
+
+# src/settings_window/command_palette.rs
+cmdpal-downloading = Downloading the extension…
+
+# src/settings_window/command_palette.rs
+cmdpal-installing = Waiting for the installer. Approve the administrator prompt to continue.
+
+# src/settings_window/command_palette.rs
+cmdpal-installing-short = Installing…
+
+# src/settings_window/command_palette.rs
+cmdpal-removing = Removing the extension…
+
+# src/settings_window/command_palette.rs
+cmdpal-failed = The extension could not be installed or removed.
+
+# src/settings_window/command_palette.rs
+cmdpal-reinstall = Reinstall
+
+# src/settings_window/command_palette.rs
+cmdpal-dock-bands = Dock bands
+
+# src/settings_window/command_palette.rs
+cmdpal-dock-bands-caption = Each band appears in the Command Palette Dock settings. Pin it from Edit Dock, then choose where it sits.
+
+# src/settings_window/command_palette.rs
+cmdpal-no-bands = No bands
+
+# src/settings_window/command_palette.rs
+cmdpal-no-bands-description = Add a band to pin provider limits to the Dock.
+
+# src/settings_window/command_palette.rs
+cmdpal-add-band = Add band
+
+# src/settings_window/command_palette.rs
+cmdpal-band = Band { $v0 }
+
+# src/settings_window/command_palette.rs
+cmdpal-band-removed = Band removed
+
+# src/settings_window/command_palette.rs
+cmdpal-remove-band = Remove band
+
+# src/settings_window/command_palette.rs
+cmdpal-content-hint = The Dock writes a band as a title over a subtitle.
+
+# src/settings_window/command_palette.rs
+cmdpal-indicators-hint = Up to 2 quotas: one fills the title and subtitle, two take a line each.

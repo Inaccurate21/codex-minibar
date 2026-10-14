@@ -2813,3 +2813,69 @@ game-mode-off-title = Игровой режим выключен
 
 # src/notifications.rs
 game-mode-off-body = Обычные проверки и уведомления возобновлены
+
+# src/settings_window/command_palette.rs
+command-palette = Command Palette
+
+# src/settings_window/command_palette.rs
+stream-deck = Stream Deck
+
+# src/settings_window/command_palette.rs
+install = Установить
+
+# src/settings_window/command_palette.rs
+cmdpal-extension = Расширение Command Palette
+
+# src/settings_window/command_palette.rs
+cmdpal-description = Добавляет Minibar в PowerToys Command Palette: введите название провайдера, чтобы увидеть лимиты, или закрепите бэнды в доке. Для установки нужно подтверждение администратора.
+
+# src/settings_window/command_palette.rs
+cmdpal-installed-hint = Установлено. Введите «minibar» или название провайдера в Command Palette либо закрепите бэнды через «Изменить док».
+
+# src/settings_window/command_palette.rs
+cmdpal-downloading = Загрузка расширения…
+
+# src/settings_window/command_palette.rs
+cmdpal-installing = Ожидание установщика. Подтвердите запрос администратора, чтобы продолжить.
+
+# src/settings_window/command_palette.rs
+cmdpal-installing-short = Установка…
+
+# src/settings_window/command_palette.rs
+cmdpal-removing = Удаление расширения…
+
+# src/settings_window/command_palette.rs
+cmdpal-failed = Не удалось установить или удалить расширение.
+
+# src/settings_window/command_palette.rs
+cmdpal-reinstall = Переустановить
+
+# src/settings_window/command_palette.rs
+cmdpal-dock-bands = Бэнды дока
+
+# src/settings_window/command_palette.rs
+cmdpal-dock-bands-caption = Каждый бэнд появляется в настройках дока Command Palette. Закрепите его через «Изменить док» и выберите место.
+
+# src/settings_window/command_palette.rs
+cmdpal-no-bands = Нет бэндов
+
+# src/settings_window/command_palette.rs
+cmdpal-no-bands-description = Добавьте бэнд, чтобы закрепить лимиты провайдера в доке.
+
+# src/settings_window/command_palette.rs
+cmdpal-add-band = Добавить бэнд
+
+# src/settings_window/command_palette.rs
+cmdpal-band = Бэнд { $v0 }
+
+# src/settings_window/command_palette.rs
+cmdpal-band-removed = Бэнд удалён
+
+# src/settings_window/command_palette.rs
+cmdpal-remove-band = Удалить бэнд
+
+# src/settings_window/command_palette.rs
+cmdpal-content-hint = Док показывает бэнд как заголовок над подзаголовком.
+
+# src/settings_window/command_palette.rs
+cmdpal-indicators-hint = До 2 квот: одна занимает заголовок и подзаголовок, две — по строке.

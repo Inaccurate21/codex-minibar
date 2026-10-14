@@ -2814,3 +2814,69 @@ game-mode-off-title = Mode jeu désactivé
 
 # src/notifications.rs
 game-mode-off-body = Vérifications et notifications normales rétablies
+
+# src/settings_window/command_palette.rs
+command-palette = Command Palette
+
+# src/settings_window/command_palette.rs
+stream-deck = Stream Deck
+
+# src/settings_window/command_palette.rs
+install = Installer
+
+# src/settings_window/command_palette.rs
+cmdpal-extension = Extension Command Palette
+
+# src/settings_window/command_palette.rs
+cmdpal-description = Ajoute Minibar à la Command Palette de PowerToys : tapez un fournisseur pour voir ses limites, ou épinglez des bandes au Dock. L’installation demande l’approbation d’un administrateur.
+
+# src/settings_window/command_palette.rs
+cmdpal-installed-hint = Installée. Tapez « minibar » ou le nom d’un fournisseur dans la Command Palette, ou épinglez des bandes via Modifier le Dock.
+
+# src/settings_window/command_palette.rs
+cmdpal-downloading = Téléchargement de l’extension…
+
+# src/settings_window/command_palette.rs
+cmdpal-installing = En attente du programme d’installation. Approuvez la demande administrateur pour continuer.
+
+# src/settings_window/command_palette.rs
+cmdpal-installing-short = Installation…
+
+# src/settings_window/command_palette.rs
+cmdpal-removing = Suppression de l’extension…
+
+# src/settings_window/command_palette.rs
+cmdpal-failed = Impossible d’installer ou de supprimer l’extension.
+
+# src/settings_window/command_palette.rs
+cmdpal-reinstall = Réinstaller
+
+# src/settings_window/command_palette.rs
+cmdpal-dock-bands = Bandes du Dock
+
+# src/settings_window/command_palette.rs
+cmdpal-dock-bands-caption = Chaque bande apparaît dans les paramètres du Dock de la Command Palette. Épinglez-la via Modifier le Dock, puis choisissez sa place.
+
+# src/settings_window/command_palette.rs
+cmdpal-no-bands = Aucune bande
+
+# src/settings_window/command_palette.rs
+cmdpal-no-bands-description = Ajoutez une bande pour épingler les limites d’un fournisseur au Dock.
+
+# src/settings_window/command_palette.rs
+cmdpal-add-band = Ajouter une bande
+
+# src/settings_window/command_palette.rs
+cmdpal-band = Bande { $v0 }
+
+# src/settings_window/command_palette.rs
+cmdpal-band-removed = Bande supprimée
+
+# src/settings_window/command_palette.rs
+cmdpal-remove-band = Supprimer la bande
+
+# src/settings_window/command_palette.rs
+cmdpal-content-hint = Le Dock affiche une bande sous forme de titre au-dessus d’un sous-titre.
+
+# src/settings_window/command_palette.rs
+cmdpal-indicators-hint = Jusqu’à 2 quotas : un remplit le titre et le sous-titre, deux occupent une ligne chacun.

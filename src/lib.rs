@@ -3,6 +3,7 @@ pub mod app;
 pub mod banked_reset;
 pub mod claude;
 pub mod claude_desktop;
+pub mod cmdpal;
 pub mod codex;
 pub mod cursor;
 pub mod discovery;
