@@ -634,6 +634,7 @@ mod tests {
             resets_at: None,
             icon: Icon {
                 name: "codex",
+                badge: None,
                 tint: [0, 0, 0],
             },
             limit_value: LimitValue::Remaining,
