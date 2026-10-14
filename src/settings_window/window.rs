@@ -102,6 +102,11 @@ pub(crate) struct SettingsWindow {
     pub(super) removed_widget: Option<(usize, TrayWidget)>,
     pub(super) taskbar_dialog: Option<super::tray::TrayDialog>,
     pub(super) removed_taskbar_widget: Option<(usize, crate::settings::TaskbarWidget)>,
+    pub(super) dock_dialog: Option<super::tray::TrayDialog>,
+    pub(super) removed_dock_widget: Option<(usize, crate::settings::TaskbarWidget)>,
+    pub(super) cmdpal_phase: crate::cmdpal::InstallPhase,
+    /// Whether the Command Palette extension package is registered.
+    pub(super) cmdpal_installed: bool,
     pub(super) confirm_reset: bool,
     /// The popup shortcut button is waiting for a key combination.
     pub(super) hotkey_recording: bool,
@@ -226,6 +231,10 @@ impl SettingsWindow {
             removed_widget: None,
             taskbar_dialog: None,
             removed_taskbar_widget: None,
+            dock_dialog: None,
+            removed_dock_widget: None,
+            cmdpal_phase: crate::cmdpal::InstallPhase::Idle,
+            cmdpal_installed: crate::cmdpal::is_installed(),
             confirm_reset: false,
             hotkey_recording: false,
             hotkey_rejected: false,
@@ -262,6 +271,7 @@ impl SettingsWindow {
         cx.refresh_windows();
         self.settings.normalize_tray_widgets();
         self.settings.taskbar.normalize();
+        self.settings.command_palette.normalize();
         self.settings.normalize_popup_visibility();
         persistence::queue(self.state.settings_tx.clone(), move |settings| {
             edit(settings)
@@ -567,6 +577,8 @@ impl SettingsWindow {
             self.tray_dialog = None;
         } else if self.taskbar_dialog.is_some() {
             self.taskbar_dialog = None;
+        } else if self.dock_dialog.is_some() {
+            self.dock_dialog = None;
         } else if self.close_open_vsx(cx) {
         } else if self.confirm_reset {
             self.confirm_reset = false;
@@ -1363,6 +1375,9 @@ impl Render for SettingsWindow {
         if let Some(overlay) = self.taskbar_dialog_overlay(&mut k, window, cx) {
             overlays.push(overlay);
         }
+        if let Some(overlay) = self.dock_dialog_overlay(&mut k, window, cx) {
+            overlays.push(overlay);
+        }
         if let Some(overlay) = self.reset_confirm_overlay(&mut k, cx) {
             overlays.push(overlay);
         }
@@ -1424,6 +1439,11 @@ pub(super) struct Overlays {
     pub(super) troubleshoot: kit::Presence<crate::troubleshoot::ToolPickerState>,
     pub(super) tray: kit::Presence<(super::tray::TrayDialog, usize, TrayWidget)>,
     pub(super) taskbar: kit::Presence<(
+        super::tray::TrayDialog,
+        usize,
+        crate::settings::TaskbarWidget,
+    )>,
+    pub(super) dock: kit::Presence<(
         super::tray::TrayDialog,
         usize,
         crate::settings::TaskbarWidget,

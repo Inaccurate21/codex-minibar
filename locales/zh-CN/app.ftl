@@ -1896,3 +1896,69 @@ game-mode-off-title = 游戏模式已关闭
 
 # src/notifications.rs
 game-mode-off-body = 已恢复正常检查和通知
+
+# src/settings_window/command_palette.rs
+command-palette = Command Palette
+
+# src/settings_window/command_palette.rs
+stream-deck = Stream Deck
+
+# src/settings_window/command_palette.rs
+install = 安装
+
+# src/settings_window/command_palette.rs
+cmdpal-extension = Command Palette 扩展
+
+# src/settings_window/command_palette.rs
+cmdpal-description = 将 Minibar 添加到 PowerToys Command Palette：输入提供商名称即可查看额度，或将条带固定到 Dock。安装需要管理员批准。
+
+# src/settings_window/command_palette.rs
+cmdpal-installed-hint = 已安装。在 Command Palette 中输入“minibar”或提供商名称，或通过“编辑 Dock”固定条带。
+
+# src/settings_window/command_palette.rs
+cmdpal-downloading = 正在下载扩展…
+
+# src/settings_window/command_palette.rs
+cmdpal-installing = 正在等待安装程序。请批准管理员提示以继续。
+
+# src/settings_window/command_palette.rs
+cmdpal-installing-short = 正在安装…
+
+# src/settings_window/command_palette.rs
+cmdpal-removing = 正在移除扩展…
+
+# src/settings_window/command_palette.rs
+cmdpal-failed = 无法安装或移除扩展。
+
+# src/settings_window/command_palette.rs
+cmdpal-reinstall = 重新安装
+
+# src/settings_window/command_palette.rs
+cmdpal-dock-bands = Dock 条带
+
+# src/settings_window/command_palette.rs
+cmdpal-dock-bands-caption = 每个条带都会出现在 Command Palette 的 Dock 设置中。通过“编辑 Dock”固定它，然后选择位置。
+
+# src/settings_window/command_palette.rs
+cmdpal-no-bands = 没有条带
+
+# src/settings_window/command_palette.rs
+cmdpal-no-bands-description = 添加条带，将提供商额度固定到 Dock。
+
+# src/settings_window/command_palette.rs
+cmdpal-add-band = 添加条带
+
+# src/settings_window/command_palette.rs
+cmdpal-band = 条带 { $v0 }
+
+# src/settings_window/command_palette.rs
+cmdpal-band-removed = 条带已移除
+
+# src/settings_window/command_palette.rs
+cmdpal-remove-band = 移除条带
+
+# src/settings_window/command_palette.rs
+cmdpal-content-hint = Dock 将条带显示为标题和下方的副标题。
+
+# src/settings_window/command_palette.rs
+cmdpal-indicators-hint = 最多 2 个额度：一个占用标题和副标题，两个各占一行。

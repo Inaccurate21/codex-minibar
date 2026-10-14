@@ -1944,6 +1944,56 @@ impl TaskbarWidget {
     }
 }
 
+/// Bands the PowerToys Command Palette extension offers to its Dock.
+///
+/// Widgets reuse the taskbar widget model, but the Dock draws them itself as
+/// an icon with a title and subtitle, so every widget is a text Glance.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct CommandPaletteSettings {
+    pub widgets: Vec<TaskbarWidget>,
+}
+
+impl CommandPaletteSettings {
+    pub fn normalize(&mut self) -> bool {
+        let mut changed = false;
+        let mut ids = std::collections::HashSet::new();
+        for widget in &mut self.widgets {
+            if widget.style != TaskbarWidgetStyle::Glance {
+                widget.style = TaskbarWidgetStyle::Glance;
+                changed = true;
+            }
+            changed |= widget.normalize();
+            if !ids.insert(widget.id.clone()) {
+                widget.id = new_dock_widget_id();
+                ids.insert(widget.id.clone());
+                changed = true;
+            }
+        }
+        changed
+    }
+}
+
+fn new_dock_widget_id() -> String {
+    new_tray_widget_id().replacen("tray-", "dock-", 1)
+}
+
+impl TaskbarWidget {
+    /// The provider preset for a Dock band.
+    pub fn dock_for_provider(provider: ProviderId) -> Self {
+        Self {
+            id: new_dock_widget_id(),
+            ..Self::for_provider(provider)
+        }
+    }
+
+    pub fn dock_duplicate_with_new_id(&self) -> Self {
+        let mut copy = self.clone();
+        copy.id = new_dock_widget_id();
+        copy
+    }
+}
+
 /// Live widgets drawn inside the Windows taskbar.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -2129,6 +2179,8 @@ pub struct Settings {
     pub tray_widgets: Vec<TrayWidget>,
     /// Widgets drawn inside the Windows taskbar.
     pub taskbar: TaskbarSettings,
+    /// Dock bands of the PowerToys Command Palette extension.
+    pub command_palette: CommandPaletteSettings,
     pub notifications: NotificationSettings,
     pub history_retention_days: u16,
     pub check_for_updates: bool,
@@ -2199,6 +2251,7 @@ impl Default for Settings {
             // An empty list intentionally means "show the ordinary app icon".
             tray_widgets: Vec::new(),
             taskbar: TaskbarSettings::default(),
+            command_palette: CommandPaletteSettings::default(),
             notifications: NotificationSettings::default(),
             history_retention_days: 30,
             check_for_updates: true,
@@ -2279,8 +2332,9 @@ impl Settings {
         let taskbar_introduced =
             original_version < TASKBAR_DEFAULT_VERSION && settings.enable_taskbar_by_default();
         let repaired = settings.repair_inplace();
-        let tray_widgets_normalized =
-            settings.normalize_tray_widgets() | settings.taskbar.normalize();
+        let tray_widgets_normalized = settings.normalize_tray_widgets()
+            | settings.taskbar.normalize()
+            | settings.command_palette.normalize();
         let popup_visibility_normalized = settings.normalize_popup_visibility();
         if dirty
             || moved_credentials
@@ -2312,6 +2366,7 @@ impl Settings {
         settings.repair_inplace();
         settings.normalize_tray_widgets();
         settings.taskbar.normalize();
+        settings.command_palette.normalize();
         settings.normalize_popup_visibility();
         Ok(settings)
     }

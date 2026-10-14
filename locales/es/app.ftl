@@ -1917,3 +1917,69 @@ game-mode-off-title = Modo juego desactivado
 
 # src/notifications.rs
 game-mode-off-body = Vuelven las consultas y notificaciones normales
+
+# src/settings_window/command_palette.rs
+command-palette = Command Palette
+
+# src/settings_window/command_palette.rs
+stream-deck = Stream Deck
+
+# src/settings_window/command_palette.rs
+install = Instalar
+
+# src/settings_window/command_palette.rs
+cmdpal-extension = Extensión de Command Palette
+
+# src/settings_window/command_palette.rs
+cmdpal-description = Añade Minibar a la Command Palette de PowerToys: escribe un proveedor para ver sus límites o ancla bandas al Dock. La instalación requiere aprobación de administrador.
+
+# src/settings_window/command_palette.rs
+cmdpal-installed-hint = Instalada. Escribe «minibar» o el nombre de un proveedor en Command Palette, o ancla bandas desde Editar Dock.
+
+# src/settings_window/command_palette.rs
+cmdpal-downloading = Descargando la extensión…
+
+# src/settings_window/command_palette.rs
+cmdpal-installing = Esperando al instalador. Aprueba la solicitud de administrador para continuar.
+
+# src/settings_window/command_palette.rs
+cmdpal-installing-short = Instalando…
+
+# src/settings_window/command_palette.rs
+cmdpal-removing = Quitando la extensión…
+
+# src/settings_window/command_palette.rs
+cmdpal-failed = No se pudo instalar ni quitar la extensión.
+
+# src/settings_window/command_palette.rs
+cmdpal-reinstall = Reinstalar
+
+# src/settings_window/command_palette.rs
+cmdpal-dock-bands = Bandas del Dock
+
+# src/settings_window/command_palette.rs
+cmdpal-dock-bands-caption = Cada banda aparece en la configuración del Dock de Command Palette. Ánclala desde Editar Dock y elige su posición.
+
+# src/settings_window/command_palette.rs
+cmdpal-no-bands = No hay bandas
+
+# src/settings_window/command_palette.rs
+cmdpal-no-bands-description = Añade una banda para anclar los límites de un proveedor al Dock.
+
+# src/settings_window/command_palette.rs
+cmdpal-add-band = Añadir banda
+
+# src/settings_window/command_palette.rs
+cmdpal-band = Banda { $v0 }
+
+# src/settings_window/command_palette.rs
+cmdpal-band-removed = Banda quitada
+
+# src/settings_window/command_palette.rs
+cmdpal-remove-band = Quitar banda
+
+# src/settings_window/command_palette.rs
+cmdpal-content-hint = El Dock muestra una banda como un título sobre un subtítulo.
+
+# src/settings_window/command_palette.rs
+cmdpal-indicators-hint = Hasta 2 cuotas: una ocupa el título y el subtítulo; dos, una línea cada una.
