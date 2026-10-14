@@ -103,17 +103,54 @@ impl Placement {
     /// The corner by the taskbar: the tray's end by default, or the end
     /// nearest `anchor` when the popup opens `beside` a taskbar widget.
     pub(crate) fn for_anchor(monitor: Monitor, anchor: (i32, i32), beside: bool) -> Self {
-        let (bounds, work) = (monitor.bounds, monitor.work);
-        let left_bar = work.left > bounds.left;
-        let right_bar = work.right < bounds.right;
-        let top_bar = work.top > bounds.top;
-        let vertical = left_bar || right_bar;
+        let bounds = monitor.bounds;
+        let edge = taskbar_edge(monitor);
+        let vertical = matches!(edge, Edge::Left | Edge::Right);
         let center_x = bounds.left + bounds.width() / 2;
         let center_y = bounds.top + bounds.height() / 2;
         Self {
-            left: left_bar || (!right_bar && beside && anchor.0 < center_x),
-            top: top_bar || (vertical && beside && anchor.1 < center_y),
+            left: edge == Edge::Left || (edge != Edge::Right && beside && anchor.0 < center_x),
+            top: edge == Edge::Top || (vertical && beside && anchor.1 < center_y),
         }
+    }
+}
+
+#[cfg(windows)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Edge {
+    Left,
+    Top,
+    Right,
+    Bottom,
+}
+
+/// The monitor edge the taskbar is docked to. Its own frame decides, because
+/// third-party appbars shrink the work area too; the work-area insets are only
+/// a fallback when no taskbar lives on this monitor.
+#[cfg(windows)]
+fn taskbar_edge(monitor: Monitor) -> Edge {
+    let (bounds, work) = (monitor.bounds, monitor.work);
+    if let Some(bar) = monitor.taskbar {
+        return if bar.height() > bar.width() {
+            if bar.left + bar.right < bounds.left + bounds.right {
+                Edge::Left
+            } else {
+                Edge::Right
+            }
+        } else if bar.top + bar.bottom < bounds.top + bounds.bottom {
+            Edge::Top
+        } else {
+            Edge::Bottom
+        };
+    }
+    if work.left > bounds.left {
+        Edge::Left
+    } else if work.right < bounds.right {
+        Edge::Right
+    } else if work.top > bounds.top {
+        Edge::Top
+    } else {
+        Edge::Bottom
     }
 }
 
@@ -417,6 +454,7 @@ mod tests {
                 bottom: 1080,
             },
             work,
+            taskbar: None,
             dpi: 96,
         }
     }
@@ -458,6 +496,37 @@ mod tests {
             Placement::for_anchor(side, (30, 100), true),
             Placement {
                 left: true,
+                top: true,
+            }
+        );
+    }
+
+    #[test]
+    fn other_appbars_do_not_move_the_popup_off_the_taskbar() {
+        let tray = Placement::default();
+        // A top dock plus the bottom taskbar.
+        let mut docked = monitor(rect(0, 40, 1920, 1032));
+        docked.taskbar = Some(rect(0, 1032, 1920, 1080));
+        assert_eq!(Placement::for_anchor(docked, (1800, 1050), false), tray);
+        // A left dock plus the bottom taskbar.
+        docked.work = rect(100, 0, 1920, 1032);
+        assert_eq!(Placement::for_anchor(docked, (1800, 1050), false), tray);
+        // A right dock plus the bottom taskbar, beside a Start-side widget.
+        docked.work = rect(0, 0, 1820, 1032);
+        assert_eq!(
+            Placement::for_anchor(docked, (100, 1050), true),
+            Placement {
+                left: true,
+                top: false,
+            }
+        );
+        // A bottom dock plus a top taskbar.
+        docked.work = rect(0, 48, 1920, 1000);
+        docked.taskbar = Some(rect(0, 0, 1920, 48));
+        assert_eq!(
+            Placement::for_anchor(docked, (1800, 20), false),
+            Placement {
+                left: false,
                 top: true,
             }
         );

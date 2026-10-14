@@ -1722,13 +1722,21 @@ impl Render for PopupRoot {
             cx,
         ));
 
+        // A popup by a top taskbar mirrors vertically: the chrome sits on the
+        // capsule's top edge, by the taskbar, and the pages hang below it.
+        let chrome_on_top = self.host.placement.top;
+        let (shell_top, shell_bottom) = if chrome_on_top {
+            (self.chrome_height() - CHROME_INSET, CHROME_INSET)
+        } else {
+            (CHROME_INSET, self.chrome_height() - CHROME_INSET)
+        };
         let shell = div()
             .id("popup-page-viewport")
             .absolute()
-            .top(px(CHROME_INSET))
+            .top(px(shell_top))
             .left(px(CHROME_INSET))
             .right(px(CHROME_INSET))
-            .bottom(px(self.chrome_height() - CHROME_INSET))
+            .bottom(px(shell_bottom))
             .overflow_hidden()
             .children(pages);
 
@@ -1738,11 +1746,14 @@ impl Render for PopupRoot {
         // as the height spring progresses. Only horizontal open/width motion
         // is shared with the capsule; the footer's vertical bounds stay fixed.
         let chrome_width = (capsule_w - CHROME_INSET * 2.0).max(0.0);
-        // A popup by a top taskbar hangs from the host's top edge instead.
-        let chrome_bottom = if self.host.placement.top {
-            (viewport_h - capsule_y - capsule_h).max(0.0)
-        } else {
-            0.0
+        // The chrome stands on the host edge by the taskbar: the bottom edge
+        // normally, the top edge (where the capsule hangs from) by a top bar.
+        let chrome_y = move |element: gpui::Stateful<gpui::Div>, offset: f32| {
+            if chrome_on_top {
+                element.top(px(capsule_y + CHROME_INSET + offset))
+            } else {
+                element.bottom(px(CHROME_INSET + offset))
+            }
         };
         let left_side = self.host.placement.left;
         let chrome_x = |element: gpui::Stateful<gpui::Div>| {
@@ -1752,23 +1763,24 @@ impl Render for PopupRoot {
                 element.right(px(viewport_w - capsule_x - capsule_w + CHROME_INSET))
             }
         };
-        let footer = chrome_x(div().id("popup-pinned-footer"))
+        let footer = chrome_y(chrome_x(div().id("popup-pinned-footer")), 0.0)
             .absolute()
-            .bottom(px(chrome_bottom + CHROME_INSET))
             .w(px(chrome_width))
             .h(px(self.footer_height()))
             .child(self.render_footer(capsule_w, window, cx));
         let mut chrome = vec![footer.into_any_element()];
         if self.profile_height > 0.001 {
             chrome.push(
-                chrome_x(div().id("popup-pinned-profiles"))
-                    .absolute()
-                    .bottom(px(chrome_bottom + CHROME_INSET + self.footer_height()))
-                    .w(px(chrome_width))
-                    .h(px(self.profile_height))
-                    .overflow_hidden()
-                    .child(self.render_profile_strip(window, cx))
-                    .into_any_element(),
+                chrome_y(
+                    chrome_x(div().id("popup-pinned-profiles")),
+                    self.footer_height(),
+                )
+                .absolute()
+                .w(px(chrome_width))
+                .h(px(self.profile_height))
+                .overflow_hidden()
+                .child(self.render_profile_strip(window, cx))
+                .into_any_element(),
             );
         }
 
@@ -2410,12 +2422,18 @@ impl PopupRoot {
             ));
             grid = grid.child(self.profile_row_control(key, row, selected, driver, window, cx));
         }
+        // The tight edge faces the footer, above or below the strip.
+        let (pad_top, pad_bottom) = if self.host.placement.top {
+            (10.0, 2.0)
+        } else {
+            (2.0, 10.0)
+        };
         div()
             .flex_none()
             .h(px(self.profile_height))
             .px(px(16.0))
-            .pt(px(2.0))
-            .pb(px(10.0))
+            .pt(px(pad_top))
+            .pb(px(pad_bottom))
             .child(grid)
     }
 }
