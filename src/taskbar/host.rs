@@ -1621,9 +1621,10 @@ fn free_span(geometry: Geometry, obstacles: Option<Obstacles>) -> (i32, f32) {
     match geometry.alignment {
         TaskbarAlignment::Tray => {
             let end = geometry.anchor - (TRAY_MARGIN * scale).round() as i32;
+            // Buttons that reach the tray leave no room rather than all of it.
             let start = cluster
+                .filter(|(start, _)| *start < end)
                 .map(|(_, end)| end + gap)
-                .filter(|start| *start < end)
                 .unwrap_or(i32::MIN / 2);
             (0, (end - start).max(0) as f32)
         }
@@ -1894,5 +1895,28 @@ mod tests {
 
         let (views, widths) = fit(bars(2), 5.0, width);
         assert!(views.is_empty() && widths.is_empty());
+    }
+
+    #[test]
+    fn buttons_reaching_the_tray_leave_no_room() {
+        let geometry = Geometry {
+            taskbar: null_mut(),
+            scale: 1.0,
+            edge: Edge::Bottom,
+            thickness: 40,
+            anchor: 1000,
+            start_button: None,
+            alignment: TaskbarAlignment::Tray,
+            origin: (0, 0),
+        };
+        let buttons = |end| {
+            Some(Obstacles {
+                cluster: Some((0, 0, end, 40)),
+                widgets: None,
+            })
+        };
+        assert_eq!(free_span(geometry, buttons(800)).1, 190.0);
+        assert_eq!(free_span(geometry, buttons(995)).1, 0.0);
+        assert_eq!(free_span(geometry, buttons(1200)).1, 0.0);
     }
 }

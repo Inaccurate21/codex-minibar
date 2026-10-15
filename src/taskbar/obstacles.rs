@@ -7,6 +7,10 @@
 //! Automation calls into Explorer synchronously; they run on their own MTA
 //! thread because the host thread shares Explorer's input queue and must
 //! never wait on it.
+//!
+//! The Windows 10 taskbar (also restored by ExplorerPatcher) exposes its app
+//! buttons only through MSAA, so they are read from the task list's
+//! `IAccessible` instead.
 
 use std::{
     sync::{
@@ -19,11 +23,14 @@ use std::{
 use windows::Win32::{
     Foundation::HWND,
     System::Com::{CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx},
+    System::Variant::VARIANT,
     UI::Accessibility::{
-        CUIAutomation, IUIAutomation, TreeScope_Descendants, UIA_AutomationIdPropertyId,
-        UIA_BoundingRectanglePropertyId, UIA_ClassNamePropertyId,
+        AccessibleObjectFromWindow, CUIAutomation, IAccessible, IUIAutomation,
+        TreeScope_Descendants, UIA_AutomationIdPropertyId, UIA_BoundingRectanglePropertyId,
+        UIA_ClassNamePropertyId,
     },
 };
+use windows_core::Interface;
 
 /// Screen rectangle: left, top, right, bottom.
 pub(super) type Bounds = (i32, i32, i32, i32);
@@ -136,8 +143,81 @@ fn measure(automation: &IUIAutomation) -> Option<Obstacles> {
                 None => {}
             }
         }
+        if obstacles.cluster.is_none() {
+            obstacles.cluster = classic_cluster(taskbar);
+        }
         Some(obstacles)
     }
+}
+
+fn find_child(parent: HWND, class: &str) -> Option<HWND> {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{FindWindowExW, IsWindowVisible};
+    let class = class.encode_utf16().chain([0]).collect::<Vec<_>>();
+    let child = unsafe {
+        FindWindowExW(
+            parent.0,
+            std::ptr::null_mut(),
+            class.as_ptr(),
+            std::ptr::null(),
+        )
+    };
+    (!child.is_null() && unsafe { IsWindowVisible(child) } != 0).then_some(HWND(child))
+}
+
+fn window_bounds(window: HWND) -> Option<Bounds> {
+    let mut rect = unsafe { std::mem::zeroed::<windows_sys::Win32::Foundation::RECT>() };
+    unsafe { windows_sys::Win32::UI::WindowsAndMessaging::GetWindowRect(window.0, &mut rect) };
+    (rect.right > rect.left && rect.bottom > rect.top).then_some((
+        rect.left,
+        rect.top,
+        rect.right,
+        rect.bottom,
+    ))
+}
+
+/// The app buttons of the Windows 10 taskbar plus any other toolbars on its
+/// rebar. The task list itself spans up to the tray, so only its buttons
+/// count.
+fn classic_cluster(taskbar: HWND) -> Option<Bounds> {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{FindWindowExW, IsWindowVisible};
+    let rebar = find_child(taskbar, "ReBarWindow32")?;
+    let switcher = find_child(rebar, "MSTaskSwWClass")?;
+    let list = find_child(switcher, "MSTaskListWClass")?;
+    let mut cluster = None;
+    let mut band = std::ptr::null_mut();
+    loop {
+        band = unsafe { FindWindowExW(rebar.0, band, std::ptr::null(), std::ptr::null()) };
+        if band.is_null() {
+            break;
+        }
+        if band != switcher.0
+            && unsafe { IsWindowVisible(band) } != 0
+            && let Some(bounds) = window_bounds(HWND(band))
+        {
+            cluster = Some(union(cluster, bounds));
+        }
+    }
+    unsafe {
+        let mut object = std::ptr::null_mut();
+        // OBJID_CLIENT
+        if AccessibleObjectFromWindow(list, 0xFFFF_FFFC, &IAccessible::IID, &mut object).is_err() {
+            return cluster;
+        }
+        let list = IAccessible::from_raw(object);
+        for child in 1..=list.accChildCount().unwrap_or(0) {
+            let (mut left, mut top, mut width, mut height) = (0, 0, 0, 0);
+            let child = VARIANT::from(child);
+            if list
+                .accLocation(&mut left, &mut top, &mut width, &mut height, &child)
+                .is_ok()
+                && width > 0
+                && height > 0
+            {
+                cluster = Some(union(cluster, (left, top, left + width, top + height)));
+            }
+        }
+    }
+    cluster
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
