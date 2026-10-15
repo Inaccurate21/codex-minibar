@@ -1,0 +1,45 @@
+name: Windows 10 patched x64 build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build patched x64 portable
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      CARGO_NET_GIT_FETCH_WITH_CLI: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+          targets: x86_64-pc-windows-msvc
+          components: rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: win10-x64
+          cache-on-failure: true
+
+      - name: Check formatting
+        run: cargo fmt --package codex-minibar --check
+
+      - name: Check source
+        run: cargo check --locked
+
+      - name: Build portable zip
+        shell: pwsh
+        run: .\build.ps1 -Arch x64 -SkipInstaller
+
+      - name: Upload portable build
+        uses: actions/upload-artifact@v7
+        with:
+          name: codex-minibar-1.2.2-win10-x64
+          path: dist/1.2.2/codex-minibar-1.2.2-x64-portable.zip
+          if-no-files-found: error
